@@ -572,8 +572,8 @@ char DCCSwitch(unsigned char p_cDecAdresse, unsigned char p_cDecOutput, unsigned
 
   //check ranges
   if (  ((p_cDecAdresse < 1) && (p_cDecAdresse > 64))
-     && (p_cDecOutput > 3)
-     && (p_cState > 1)
+     && ((p_cDecOutput < 0) && (p_cDecOutput > 3))
+     && ((p_cState < 0) && (p_cState > 1))
      )
   { //leave
     return false;
@@ -1055,7 +1055,7 @@ char UARTSendMemoryTrace(unsigned char route)
   unsigned char i, j;
 
   //care parameter
-  if (route > MAX_MEMORY_ROUTES) 
+  if ((route > MAX_MEMORY_ROUTES) || (route < 0)) 
   {
     return false;
   }
@@ -2013,8 +2013,11 @@ char MemorySetElementWait
      && (assigned_id    <= MAX_MEMORY_ROUTES)
      && (dec_adr        > 0)
      && (dec_adr        <= MAX_DECODER_ADRESS)
+     && (dec_state      >= 0)
      && (dec_state      <= MAX_DECODER_STATE)
+     && (wait           >= 0)
      && (wait           <= MAX_DECODER_WAIT)
+     && (forwardRoute   >= 0)
      && (forwardRoute   <= MAX_DECODER_FORWARD_ROUTE)
      )
   { //set data to arrays
@@ -2042,6 +2045,8 @@ char MemorySetRoute
   if (  (index > 0)   
      && (index <= MAX_MEMORY_ELEMENTS)
      && (fromKey > 0) 
+     && (toKey >= 0)   
+     && (bidirectional >= 0) 
      && (bidirectional <= MAX_BIDIRECTIONAL)
      )
   { //set data to arrays
@@ -2361,7 +2366,7 @@ void MemoryTask(void)
       //empty FIFO...
       unsigned char index = 0;
       if (FIFOBufferOut(&index)) {
-        if (index < MAX_MEMORY_ELEMENTS) {
+        if ((index >= 0) && (index < MAX_MEMORY_ELEMENTS)) {
           //remember index
           memoryActualIndex = index;
           //... care wait time...
@@ -2378,7 +2383,7 @@ void MemoryTask(void)
       break;
 
     case MEMORY_STATE_SWITCH_IT:
-      if (index < MAX_MEMORY_ELEMENTS) {
+      if ((index >= 0) && (index < MAX_MEMORY_ELEMENTS)) {
         //... care contend...
         DCCSwitch
           ( (EEProm.arrMemoryElements[memoryActualIndex].dec_adr-1) / 4
