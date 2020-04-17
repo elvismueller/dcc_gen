@@ -10,6 +10,16 @@
 #define	__AVR_ATmega8__	1
 //#define	__AVR_ATmega32__	1
 
+#define VERSION 3
+#define SUBVERSION 0
+#ifdef __AVR_ATmega32__
+  #define MEGA_CPU 32
+#endif
+#ifdef __AVR_ATmega8__
+  #define MEGA_CPU 8
+#endif
+
+
 #ifdef __AVR_ATmega32__
  #define PIN_OUT1 PD2
  #define PIN_OUT2 PD3
@@ -571,10 +581,7 @@ char DCCSwitch(unsigned char p_cDecAdresse, unsigned char p_cDecOutput, unsigned
   p_cDecAdresse++;
 
   //check ranges
-  if (  ((p_cDecAdresse < 1) && (p_cDecAdresse > 64))
-     && ((p_cDecOutput < 0) && (p_cDecOutput > 3))
-     && ((p_cState < 0) && (p_cState > 1))
-     )
+  if ((p_cDecAdresse > 64) || (p_cDecOutput > 3) || (p_cState > 1))
   { //leave
     return false;
   }
@@ -605,7 +612,7 @@ char DCCSwitch(unsigned char p_cDecAdresse, unsigned char p_cDecOutput, unsigned
   
   //tell user
   printf_P
-    ( PSTR("DW; %u; %u; %u (MA=%u)\n\r")
+    ( PSTR("DW;%u;%u;%u(MA=%u)\n\r")
     , p_cDecAdresse
     , p_cDecOutput
     , p_cState
@@ -755,7 +762,10 @@ void UARTSendString(char * pStr)
 
 void UARTHello(void) {
   //hello world
-  printf_P(PSTR("\x1B[2J\x1B[HEMM SimpleDCCSwitcher; %u\n\rtype '?' for help...\n\r"), 300);
+  printf_P(PSTR("\x1B[2J\x1B[Hdcc_gen v%u.%u ATMega%u\n\r" ), VERSION, SUBVERSION, MEGA_CPU);
+  #ifdef __AVR_ATmega32__
+    printf_P(PSTR("type '?' for help...\n\r"));
+  #endif
 }
 
 unsigned short UARTCalcChkSum(char *pBuffer, unsigned char p_ucLength)
@@ -1018,7 +1028,7 @@ void UARTSendMemoryElements(void)
     if (EEProm.arrMemoryElements[i].assigned_id != 0)
     {
       printf_P
-        ( PSTR("Element #%u; Route = %u; MA =%u; State = %u\n\r")
+        ( PSTR("El#%u;Rt=%u;MA=%u;St=%u\n\r")
         , i+1
         , EEProm.arrMemoryElements[i].assigned_id
         , EEProm.arrMemoryElements[i].dec_adr
@@ -1039,7 +1049,7 @@ void UARTSendMemoryRoutes(void)
        )
     {
       printf_P
-        ( PSTR("Route   #%u; fromKey = %u; toKey = %u; bidir = %u; targetDef = %u\n\r")
+        ( PSTR("Rt#%u;fK=%u;tK=%u;bi=%u;tD=%u\n\r")
         , i+1
         , (unsigned char)EEProm.arrMemoryRoutes[i].fromKey
         , (unsigned char)EEProm.arrMemoryRoutes[i].toKey
@@ -1068,7 +1078,7 @@ char UARTSendMemoryTrace(unsigned char route)
        )
     { //tell user
       printf_P
-        ( PSTR("Route #%u; fromKey = %u; toKey = %u; bidir = %u; targetDef = %u\n\r")
+        ( PSTR("Rt#%u;fK=%u;tK=%u;bi=%u;tD=%u\n\r")
         , i
         , EEProm.arrMemoryRoutes[i-1].fromKey
         , EEProm.arrMemoryRoutes[i-1].toKey
@@ -1086,7 +1096,7 @@ char UARTSendMemoryTrace(unsigned char route)
           {
             //tell user
             printf_P
-              ( PSTR("      |- #%u: MA = %u; State = %u\n\r")
+              ( PSTR("|-#%u:MA=%u;St=%u\n\r")
               , j+1
               , EEProm.arrMemoryElements[j].dec_adr
               , EEProm.arrMemoryElements[j].dec_state
@@ -1106,7 +1116,7 @@ void UARTSendMemoryOverview()
   unsigned char count2 = 0;
   unsigned char i;
   //summarize
-  for (i = 0; i < MAX_MEMORY_ROUTES; i++) 
+  for (i = 1; i < MAX_MEMORY_ROUTES; i++) 
   { //pick the ones with keys defined
     unsigned char fromKey = EEProm.arrMemoryRoutes[i-1].fromKey;
     unsigned char toKey   = EEProm.arrMemoryRoutes[i-1].toKey;
@@ -1131,6 +1141,15 @@ void UARTSendMemoryOverview()
       );
     printf_P
       ( PSTR("Routes used: %u (%u proz.)\n\r")
+      , count1
+      , (unsigned char)(((float)count1*100.0)/(float)MAX_MEMORY_ROUTES)
+      );
+  #endif
+  #ifdef __AVR_ATmega8__
+    printf_P
+      ( PSTR("El:%u(%u%%) Rt:%u(%u%%)\n\r")
+      , count2
+      , (unsigned char)(((float)count2*100.0)/(float)MAX_MEMORY_ELEMENTS)
       , count1
       , (unsigned char)(((float)count1*100.0)/(float)MAX_MEMORY_ROUTES)
       );
@@ -1166,7 +1185,7 @@ void UARTCheckCommand(void)
     case 'S':
       //answer
       printf_P
-        ( PSTR("DS; %u; %u; %u\n\r")
+        ( PSTR("DS;%u;%u;%u\n\r")
         , cStatusMode           
         , ledActiveState
         , memoryActiveState
@@ -1588,7 +1607,7 @@ char MemoryReadFromEEprom(void)
         printf_P(PSTR("Error reading EEProm! Checkbyte not guilty (V:%u)\n\r"),ucGuilty);
     #endif
     #ifdef __AVR_ATmega8__
-        printf_P(PSTR("Err EEProm! (V:%u)\n\r"),ucGuilty);
+        printf_P(PSTR("ErrEEProm!(V:%u)\n\r"),ucGuilty);
     #endif
   }
   //fin
@@ -2001,7 +2020,7 @@ void MemoryTestInit(char token)
     printf_P(PSTR("Memory initial filled!\n\r"));
   #endif
   #ifdef __AVR_ATmega8__
-    printf_P(PSTR("Mem init!\n\r"));
+    printf_P(PSTR("M_F!\n\r"));
   #endif
 }
 
@@ -2011,9 +2030,7 @@ void MemoryInit(void)
     //clear memory
     MemoryClear();
     //test init
-    MemoryTestInit(84);
-    //tell user
-    printf_P(PSTR("MM Init!"));
+    MemoryTestInit(42);
   }
 }
 
@@ -2106,7 +2123,7 @@ char MemoryDoRoute(unsigned char index)
       //care about forwarded routes
       if (EEProm.arrMemoryElements[i].forwardRoute > 0)
       { //tell user
-        printf_P(PSTR(";>>R%u"),EEProm.arrMemoryElements[i].dec_adr);
+        printf_P(PSTR(";>>Rt%u"),EEProm.arrMemoryElements[i].dec_adr);
         //call recursiv sub route!
         if (!MemoryDoRoute(EEProm.arrMemoryElements[i].dec_adr-1))
         {  //error
@@ -2146,7 +2163,7 @@ char MemoryCareTargetlessRoutes
   printf_P(PSTR("Care Targetless Route for key %u"),FirstPressedKey);
 #endif
 #ifdef __AVR_ATmega8__
-  printf_P(PSTR("rt wo: %u"),FirstPressedKey);
+  printf_P(PSTR("Rt_wo:%u"),FirstPressedKey);
 #endif
   //loop all Routes
   for (i = 0; i < MAX_MEMORY_ROUTES; i++) {
@@ -2159,7 +2176,7 @@ char MemoryCareTargetlessRoutes
         ret = true;
       } else {
         //tell user
-        printf_P(PSTR(";+##R%u"),i+1);
+        printf_P(PSTR(";+##Rt%u"),i+1);
         //care route
         MemoryDoRoute(i);
       }
@@ -2182,7 +2199,7 @@ void MemoryCareCompleteRoutes
   printf_P(PSTR("Care routes with target. Start key %u, end key %u"),FirstPressedKey, SecondPressedKey);
 #endif
 #ifdef __AVR_ATmega8__
-  printf_P(PSTR("rt w: %u > %u"),FirstPressedKey, SecondPressedKey);
+  printf_P(PSTR("rt_w:%u>%u"),FirstPressedKey, SecondPressedKey);
 #endif
   //loop all Routes
   for (i = 0; i < MAX_MEMORY_ROUTES; i++) {
