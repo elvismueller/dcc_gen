@@ -4,6 +4,12 @@
  - new uC: ATMEGA32
  - Start-Target Feature
  - improved Console Functions
+ dcc_gen V3.1
+ - (2022-4-15) SETUP: fix programmer config (platformio.ini), runs now with USBProg3.0 again
+               ATMEGA8: reduce RAM: less Routes, no selftest, Known Issue: still problems with UART
+               DCC: changed sync length to 16 iterations, use utils/delay functions,
+                    re-adjust DCC bit length, fix switch command (add active flag)
+               GENERAL: cleanup unused functions, remove white spaces, formating, renaming
  *******************************************************************************************
 */
 
@@ -11,7 +17,7 @@
 //#define	__AVR_ATmega32__	1
 
 #define VERSION 3
-#define SUBVERSION 0
+#define SUBVERSION 1
 #ifdef __AVR_ATmega32__
   #define MEGA_CPU 32
 #endif
@@ -32,6 +38,7 @@
 #include <stdlib.h>
 #include "avr/eeprom.h"
 #include <avr/pgmspace.h>
+#include <util/delay.h>
 
 #define false 0
 #define true 1
@@ -94,49 +101,16 @@ char DCCSwitch
 void DCCToggle(void);
 
 //delay functions
-void delay_1ms(unsigned int uiDuration);
-void delay_58us(void);
-void delay_56us(void);
+void delay_ms(unsigned int uiDuration);
+void delay_us(unsigned int uiDuration);
 
 //UART functions
 void           UARTInit(void);
 char           UARTReceive(void);
 char           UARTGetC(void);
 void           UARTTransmit(char data);
-void           UARTSendString(char * pStr);
+void           UARTSendString(const char * pStr);
 void           UARTHello(void);
-unsigned short UARTCalcChkSum(char *pBuffer, unsigned char p_ucLength);
-void           UARTAddStr(char *p_pDest, char *p_pSrc, unsigned char p_ucLength);
-char           UARTAddTokenStr
-                 ( char *p_pDest
-                 , char *p_pSrc
-                 , unsigned char p_ucMaxBufferLength
-                 );
-char           UARTAddTokenChar
-                 ( char *p_pDest
-                 , char pSrc
-                 , unsigned char p_ucMaxBufferLength
-                 );
-char           UARTAddLineFeed
-                 ( char *p_pDest
-                 );
-
-char           UARTAddTokenCharNum
-                 ( char *p_pDest
-                 , char pSrc
-                 , unsigned char p_ucMaxBufferLength
-                 );
-char           UARTAddTokenUCharNum
-                 ( char *p_pDest
-                 , char pSrc
-                 , unsigned char p_ucMaxBufferLength
-                 );
-char           UARTAddTokenCharHex
-                 ( char *p_pDest
-                 , char cSrc
-                 , unsigned char p_ucMaxBufferLength
-                 );
-void           UARTClearTransmitBuffer(void);
 void           UARTCheckCommand(void);
 void           UARTSendHelp(void); 
 void           UARTComunicate(void);
@@ -147,8 +121,6 @@ void           UARTSendMemoryOverview(void);
 
 //define stream for printf
 static FILE uart_stream = FDEV_SETUP_STREAM((void *)UARTTransmit,NULL, _FDEV_SETUP_RW);
-
-
 
 //protocol functions
 char GetTokenToChar
@@ -209,9 +181,6 @@ void MemoryCareCompleteRoutes
        , unsigned char SecondPressedKey
        );
 
-//Logging
-void Log(char *p_pDest);
-
 //task functions
 void LEDTask(void);
 void MemoryTask(void);
@@ -230,7 +199,7 @@ void KeybTask(void);
 
 #ifdef __AVR_ATmega8__
   #define MAX_MEMORY_ELEMENTS                     0x8F
-  #define MAX_MEMORY_ROUTES                       0x8F
+  #define MAX_MEMORY_ROUTES                       120
   #define MAX_KEY_GROUPS                          1
   #define MAX_REAL_KEYS                           10
 #endif
@@ -281,7 +250,6 @@ unsigned char EEPGuilty EEMEM;
 //******************************************************************************************
 // global variables
 //****************************************************************************************** 
-char  UARTTransmitBuffer[100];
 char  UARTReceiveBuffer[100];
 char  UARTLastCommand[100];
 char* pLastReceiveByte = 0;
@@ -290,9 +258,9 @@ char  cStatusMode = 'I';        //I = idle
 char  cStatusError = 0;         //0 = no error
 
 char cTimerBase = 19; //1160us Timer
-long lTimer0 = 0;    //Timer0
-long lTimer1 = 0;    //Timer1
-long lTimer2 = 0;    //Timer2
+long lLedTaskTimer = 0;
+long lKeybTaskTimer = 0;
+long lMemoryTaskTimer = 0;
 
 unsigned char cKey[MAX_VIRTUAL_KEYS];
 
@@ -303,10 +271,12 @@ char SecondPressedKey = 0;
 char keyActive = false;
 
 char HeartbeatActive = false;
+char HeartbeatNackCount = 0;
 
 #define LED_STATE_IDLE    0
 #define LED_STATE_WAITING 1
 #define LED_STATE_COMMIT  2
+#define LED_STATE_NACK    3
 
 unsigned char ledActiveState = LED_STATE_IDLE;
 
@@ -413,9 +383,9 @@ ISR (TIMER0_OVF_vect)
   } else {
     cTimerBase = 4;
     //care other timers, decrement if set
-    if (lTimer0 > 0) lTimer0--;
-    if (lTimer1 > 0) lTimer1--;
-    if (lTimer2 > 0) lTimer2--;
+    if (lLedTaskTimer > 0) lLedTaskTimer--;
+    if (lKeybTaskTimer > 0) lKeybTaskTimer--;
+    if (lMemoryTaskTimer > 0) lMemoryTaskTimer--;
   }
 }
 
@@ -490,46 +460,33 @@ void DCCDelete(void)
 }
 
 void DCCBitOne(void)
-{ //set ports
+{
   DCCSet();
-  //wait 58us
-  delay_58us();
-  //delete ports
+  delay_us(58);
   DCCDelete();
-  //wait 58us
-  delay_56us();
+  delay_us(55);
 }
 
 void DCCBitZero(void)
-{ //set ports
+{
   DCCSet();
-  //wait 58us
-  delay_58us();
-  delay_56us();
-  //delete ports
+  delay_us(114);
   DCCDelete();
-  //wait 58us
-  delay_56us();
-  delay_56us();
-
+  delay_us(104);
 }
 
 void DCCBitZeroLong(void)
-{ //set ports
+{
   DCCSet();
-  //wait 2ms
-  delay_1ms(2);
-  //delete ports
+  delay_ms(2);
   DCCDelete();
-  //wait 2ms
-  delay_1ms(2);
-
+  delay_ms(2);
 }
 
 void DCCSync(void)
 { char i;
   //more than 10 ones
-  for (i=0;i<12;i++)
+  for (i=0;i<16;i++)
   {
     DCCBitOne();
   }
@@ -573,24 +530,31 @@ void DCCToggle(void)
 
 char DCCSwitch(unsigned char p_cDecAdresse, unsigned char p_cDecOutput, unsigned char p_cState)
 { 
-  unsigned char Adressbyte;
-  unsigned char Datenbyte;
-  unsigned char Pruefsumme;
+  unsigned char adressbyte;
+  unsigned char databyte;
+  unsigned char checksumbyte;
 
   //Nr. 0 modules not used
   p_cDecAdresse++;
 
   //check ranges
-  if ((p_cDecAdresse > 64) || (p_cDecOutput > 3) || (p_cState > 1))
+  if ((p_cDecOutput > 3) || (p_cState > 1))
   { //leave
     return false;
   }
 
-  Adressbyte = 0x80 + (p_cDecAdresse & 0x3F);
-  Datenbyte  = 0x80 + ((p_cDecAdresse / 0x40) ^ 0x07) * 0x10;
-  Datenbyte  += ((p_cDecOutput & 0x03) << 1);
-  Datenbyte  += (p_cState & 0x01);
-  Pruefsumme  = Adressbyte ^ Datenbyte;
+  // DCC basic accessory decoder format 
+  // 10AAAAAA 0 1AAADAAC 0
+  // the middle adress block needs to be inverted (results in the xor below)
+  // D=1 means coil on, D=0 coil off
+  // the last two adress bits are usually known as decoder output 1-4
+  // C refers the coil to be activated (usually straight/round or green/red)
+  adressbyte = 0x80 + (p_cDecAdresse & 0x3F);
+  databyte  = 0x80 + ((p_cDecAdresse / 0x40) ^ 0x07) * 0x10;
+  databyte  += ((p_cDecOutput & 0x03) << 1);
+  databyte  += (p_cState & 0x01);
+  databyte  += 0x08;
+  checksumbyte  = adressbyte ^ databyte;
 
   // Overflow Interrupt erlauben
   TIMSK &= ~(1<<TOIE0);
@@ -599,11 +563,11 @@ char DCCSwitch(unsigned char p_cDecAdresse, unsigned char p_cDecOutput, unsigned
   DCCBitZeroLong();    //oszi
   DCCSync();           //synchronisation
   DCCStartbit();
-  DCCByte(Adressbyte); //adress
+  DCCByte(adressbyte); //adress
   DCCStartbit();
-  DCCByte(Datenbyte);  //data
+  DCCByte(databyte);  //data
   DCCStartbit();
-  DCCByte(Pruefsumme); //prüfsumme
+  DCCByte(checksumbyte); //prüfsumme
   DCCStopbit();
   DCCBitZeroLong();    //oszi
 
@@ -660,40 +624,33 @@ uint8_t FIFOBufferOut(uint8_t *pByte)
 // Selftest Support
 //******************************************************************************************
 void Selftest(void)
-{ //just tell i am alive by blinking three times
-  HeartbeatSet(0);
-  delay_1ms(200);
-  HeartbeatSet(1);
-  delay_1ms(200);
-  HeartbeatSet(0);
-  delay_1ms(200);
-  HeartbeatSet(1);
-  delay_1ms(200);
-  HeartbeatSet(0);
-  delay_1ms(200);
-  HeartbeatSet(1);
-  delay_1ms(200);
+{ 
+  #ifdef __AVR_ATmega32__
+    //just tell i am alive by blinking three times
+    HeartbeatSet(0);
+    delay_ms(200);
+    HeartbeatSet(1);
+    delay_ms(200);
+    HeartbeatSet(0);
+    delay_ms(200);
+    HeartbeatSet(1);
+    delay_ms(200);
+    HeartbeatSet(0);
+    delay_ms(200);
+    HeartbeatSet(1);
+    delay_ms(200);
+  #endif
 }
 
 //very simple delay
 //based on: for (i=10000;i;i--); //ca. 181ms
-void delay_1ms(unsigned int uiDuration) 
+void delay_ms(unsigned int uiDuration) 
 {
-  int i;
-  unsigned int j;
-  for (j=uiDuration;j;j--) {
-    for (i=443;i;i--); //loops nearly 1ms at 8Mhz Crystal
-  }
+  _delay_ms(uiDuration);
 }
-void delay_58us(void) 
+void delay_us(unsigned int uiDuration) 
 {
-  int i;
-  for (i=20;i;i--); //loops nearly 58us at 8Mhz Crystal
-}
-void delay_56us(void) 
-{
-  int i;
-  for (i=18;i;i--); //loops nearly 56us at 8Mhz Crystal
+  _delay_us(uiDuration);
 }
 
 //******************************************************************************************
@@ -709,7 +666,7 @@ void UARTInit(void)
   //Set frame format: 8data, 1stop bit
   UCSRC = (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0);
   // target UARTs to Stdout
-  stdout = &uart_stream;      
+  stdout = &uart_stream;
   //clear flag
   bReceivedCommandComplete = false;
   //reset pointer
@@ -719,9 +676,9 @@ void UARTInit(void)
 // output function for printf
 int uart_putchar( char c, FILE *stream )
 {
-  if( c == '\n' ) uart_putchar( '\r', stream );
- 
-  loop_until_bit_is_set( UCSRA, UDRE );
+  // wait for empty buffer
+  while ( !( UCSRA & (1<<UDRE)) );
+  // send char
   UDR = c;
   return 0;
 }
@@ -750,17 +707,18 @@ void UARTTransmit(char data)
   UDR = data;
 }
 
-void UARTSendString(char * pStr)
+void UARTSendString(const char * pStr)
 { //send till zero
   while (*pStr) {
     UARTTransmit(*pStr);
     pStr++;
-    delay_1ms(1);
+    delay_ms(1);
   }
 
 }
 
-void UARTHello(void) {
+void UARTHello(void)
+{
   //hello world
   printf_P(PSTR("\x1B[2J\x1B[Hdcc_gen v%u.%u ATMega%u\n\r" ), VERSION, SUBVERSION, MEGA_CPU);
   #ifdef __AVR_ATmega32__
@@ -768,138 +726,11 @@ void UARTHello(void) {
   #endif
 }
 
-unsigned short UARTCalcChkSum(char *pBuffer, unsigned char p_ucLength)
-{ //temps
-  unsigned char ucSum = 0;
-  unsigned char i;
-  //check pointer
-  if (!pBuffer) return 0;
-  //calc sum
-  for (i = 0; i<p_ucLength; i++) {
-    ucSum+=pBuffer[i];
-  }
-  //return it
-  return ucSum;
-}
-
-void UARTAddStr(char *p_pDest, char *p_pSrc, unsigned char p_ucLength)
-{ unsigned char i;
-  unsigned char bfill = false;
-  for(i=0; i<p_ucLength; i++) {
-    if (*p_pSrc && !bfill) {
-      *p_pDest = *p_pSrc;
-    } else {
-      bfill = true;
-      *p_pDest = ' ';
-    }
-    p_pDest++;
-    p_pSrc++;
-  }
-}
-
-char UARTAddTokenStr
-       ( char *p_pDest
-       , char *p_pSrc
-       , unsigned char p_ucMaxBufferLength
-       )
-{ //loop unless zero or maximum reached
-  unsigned char i = 0;
-  while ((*p_pDest!=0) && (i<p_ucMaxBufferLength)) {
-    p_pDest++;
-    i++;
-  }
-  //append source unless maximum reached
-  while ((*p_pSrc!=0) && (i<p_ucMaxBufferLength)) {
-    *p_pDest = *p_pSrc;
-    p_pSrc++;
-    p_pDest++;
-    i++;
-  }
-  //close string
-  if (i<p_ucMaxBufferLength) {
-    *p_pDest = 0;
-    i++;
-  }
-  //return status
-  return (i<p_ucMaxBufferLength)?true:false;
-}
-
-char UARTAddLineFeed
-                ( char *p_pDest
-                )
-{
-  return UARTAddTokenStr(p_pDest,"\n\r", 100);
-}
-                
-
-char UARTAddTokenChar
-                ( char *p_pDest
-                , char cSrc
-                , unsigned char p_ucMaxBufferLength
-                )
-{ char buffer[2];
-  buffer[0] = cSrc;
-  buffer[1] = 0;
-  return UARTAddTokenStr(p_pDest, buffer, p_ucMaxBufferLength);
-}
-
-char UARTAddTokenCharNum
-                ( char *p_pDest
-                , char pSrc
-                , unsigned char p_ucMaxBufferLength
-                )
-{ //temps
-  char buffer[10] = {0,0,0,0,0,0,0,0,0,0};
-  //convert
-  itoa(pSrc, buffer, 10);
-  //add
-  return UARTAddTokenStr(p_pDest, buffer, p_ucMaxBufferLength);
-}
-
-char UARTAddTokenUCharNum
-                ( char *p_pDest
-                , char pSrc
-                , unsigned char p_ucMaxBufferLength
-                )
-{ //temps
-  char buffer[10] = {0,0,0,0,0,0,0,0,0,0};
-  //convert
-  utoa(pSrc, buffer, 10);
-  //add
-  return UARTAddTokenStr(p_pDest, buffer, p_ucMaxBufferLength);
-}
-
-char UARTAddTokenCharHex
-                 ( char *p_pDest
-                 , char cSrc
-                 , unsigned char p_ucMaxBufferLength
-                 )
-{ //temps
-  char cBuffer[3];
-  //convert source unless maximum reached
-  cBuffer[0] = (cSrc >> 4) & 0xF;
-  //offset
-  if (cBuffer[0]>9) cBuffer[0]+=0x37; else cBuffer[0]+=0x30;
-  cBuffer[1] = cSrc & 0xF;
-  //offset
-  if (cBuffer[1]>9) cBuffer[1]+=0x37; else cBuffer[1]+=0x30;
-  //close string
-  cBuffer[2] = 0;
-  //return status
-  return UARTAddTokenStr(p_pDest, cBuffer, p_ucMaxBufferLength);
-}
-
-void UARTClearTransmitBuffer(void) 
-{
-  int i = 0;
-  for (i=0;i<100;i++) UARTTransmitBuffer[i] = 0;
-}
-
 void CopyNumericToken
-      ( char * dest
-      , char * src
-      , char length
-      )
+  ( char * dest
+  , char * src
+  , char length
+  )
 { //temps
   unsigned char cCount = 0;
   //check param
@@ -919,9 +750,9 @@ void CopyNumericToken
 }
 
 char GetTokenToChar
-       ( char * pcBuffer
-       , char cIndex
-       )
+  ( char * pcBuffer
+  , char cIndex
+  )
 { //temps
   char cRet = 0;
   char bFound = false;
@@ -969,9 +800,9 @@ char GetTokenToChar
 }
 
 unsigned char GetTokenToUChar
-                ( char * pcBuffer
-                , char cIndex
-                )
+  ( char * pcBuffer
+  , char cIndex
+  )
 { //temps
   unsigned char cRet = 0;
   char bFound = false;
@@ -1279,7 +1110,7 @@ void UARTCheckCommand(void)
           printf_P(PSTR("not valid, should be 42\n\r"));
         #endif
         #ifdef __AVR_ATmega8__
-          printf_P(PSTR("!42\n\r"));
+          //printf_P(PSTR("!42\n\r"));
         #endif
       }
       break;
@@ -1288,8 +1119,12 @@ void UARTCheckCommand(void)
     }
   }
   //command accepted?
-  if (!accepted) {
-    printf_P(PSTR("DN\n\r"));
+  if (!accepted)
+  {
+    //UARTSendString(PSTR("DN\n\r"));
+    //user entertainment
+    HeartbeatNackCount = 3;
+    ledActiveState = LED_STATE_NACK;
   }
   //command finished
   bReceivedCommandComplete = false;
@@ -1340,13 +1175,15 @@ void UARTComunicate(void)
   //ch = UARTGetC();
   ch = UARTReceive();
   //if new char is available and not processing
-  if ((ch != 0)&&(bReceivedCommandComplete!=true)) {
+  if ((ch != 0)&&(bReceivedCommandComplete!=true))
+  {
     //care escape sequences
     if (ch == 0x1B) 
     { //escape sequence
       sendback = false;
       ch = UARTGetC();
-      if (ch == 0x5B) {
+      if (ch == 0x5B)
+      {
         ch = UARTGetC();
         switch (ch)
         { 
@@ -1363,7 +1200,9 @@ void UARTComunicate(void)
           break;
         }
       }
-    } else {
+    }
+    else
+    {
       //check for end transfer
       if ((ch == 0x0A) || (ch == 0x0D))
       { //set flag
@@ -1380,17 +1219,22 @@ void UARTComunicate(void)
       }
       else
       { 
-        if ((ch == 0x08) || (ch == 0x7F)) {
+        if ((ch == 0x08) || (ch == 0x7F))
+        {
           pLastReceiveByte--; //delete one byte
           UARTSendString("\b\x1B[K");
           sendback = false;
-        } else {
+        }
+        else
+        {
           if ((pLastReceiveByte >= UARTReceiveBuffer)&&(pLastReceiveByte <= (UARTReceiveBuffer+100)))
           { //store byte
             *pLastReceiveByte = ch;
             //point to next
             pLastReceiveByte++;
-          } else {
+          }
+          else
+          {
             //clear flag
             bReceivedCommandComplete = false;
             //reset pointer
@@ -1399,17 +1243,19 @@ void UARTComunicate(void)
         }
       }
     }
-    if (sendback) {
+    if (sendback)
+    {
       //send back
       UARTTransmit(ch);
     }
   }
   //check command
-  if (bReceivedCommandComplete == true) {
+  if (bReceivedCommandComplete == true)
+  {
     //care command
     UARTCheckCommand();
     //remember
-    strcpy(UARTReceiveBuffer, UARTLastCommand);
+    strcpy(UARTLastCommand, UARTReceiveBuffer);
     //send promt
     UARTSendString("> ");
   }
@@ -1989,7 +1835,8 @@ void MemoryTestInit(char token)
     #endif
   }
   if (token == 42)
-  { //init routes
+  {
+    //init routes
     MemorySetRoute(1, 1, 4, false, true);
     MemorySetRoute(2, 1, 3, false, true);
     MemorySetRoute(3, 4, 5, false, true);
@@ -2008,12 +1855,14 @@ void MemoryTestInit(char token)
   }
   if (token == 21)
   {
-    char i;
-    for (i = 0; i < 80; i++)
-    {
-      MemorySetRoute(i+1, i+1, 0, false, false);      
-      MemorySetElement(i+1, i+1, (i/2)+1, i%2);
-    }
+    #ifdef __AVR_ATmega32__
+      char i;
+      for (i = 0; i < 80; i++)
+      {
+        MemorySetRoute(i+1, i+1, 0, false, false);      
+        MemorySetElement(i+1, i+1, (i/2)+1, i%2);
+      }
+    #endif
   }
   //tell user
   #ifdef __AVR_ATmega32__
@@ -2035,23 +1884,23 @@ void MemoryInit(void)
 }
 
 char MemorySetElement
-       ( unsigned char index
-       , unsigned char assigned_id
-       , unsigned char dec_adr
-       , unsigned char dec_state
-       )
+  ( unsigned char index
+  , unsigned char assigned_id
+  , unsigned char dec_adr
+  , unsigned char dec_state
+  )
 { //call base function
   return MemorySetElementWait(index, assigned_id, dec_adr, dec_state, 0, 0);
 }
 
 char MemorySetElementWait
-       ( unsigned char index
-       , unsigned char assigned_id
-       , unsigned char dec_adr
-       , unsigned char dec_state
-       , unsigned char wait
-       , unsigned char forwardRoute
-       )
+  ( unsigned char index
+  , unsigned char assigned_id
+  , unsigned char dec_adr
+  , unsigned char dec_state
+  , unsigned char wait
+  , unsigned char forwardRoute
+ )
 { //check line
   if (  (index          > 0)
      && (index          <= MAX_MEMORY_ELEMENTS)
@@ -2081,12 +1930,12 @@ char MemorySetElementWait
 }
 
 char MemorySetRoute
-       ( unsigned char index
-       , unsigned char fromKey
-       , unsigned char toKey
-       , unsigned char bidirectional
-       , unsigned char targetDefined
-       )
+  ( unsigned char index
+  , unsigned char fromKey
+  , unsigned char toKey
+  , unsigned char bidirectional
+  , unsigned char targetDefined
+  )
 { //check line
   if (  (index > 0)   
      && (index <= MAX_MEMORY_ELEMENTS)
@@ -2153,8 +2002,8 @@ char MemoryDoRoute(unsigned char index)
 }
 
 char MemoryCareTargetlessRoutes
-       ( unsigned char FirstPressedKey
-       )
+  ( unsigned char FirstPressedKey
+  )
 { //temps
   unsigned char i;
   char ret = false;  
@@ -2189,9 +2038,9 @@ char MemoryCareTargetlessRoutes
 }
 
 void MemoryCareCompleteRoutes
-        ( unsigned char FirstPressedKey
-        , unsigned char SecondPressedKey
-        )
+  ( unsigned char FirstPressedKey
+  , unsigned char SecondPressedKey
+  )
 { //temps
   unsigned char i;
   //tell user
@@ -2226,25 +2075,14 @@ void MemoryCareCompleteRoutes
   printf_P(PSTR("\n\r"));
 }
 
-
-//******************************************************************************************
-// logging functions
-//******************************************************************************************
-void Log(char *p_pDest) 
-{
-}
-
 //******************************************************************************************
 // Tasks
 //******************************************************************************************
 
-
-
-//timer0
 void LEDTask(void)
 {
   //LED task
-  if (lTimer0 == 0) {
+  if (lLedTaskTimer == 0) {
     //steatemachine
     switch (ledActiveState) 
     {
@@ -2252,56 +2090,67 @@ void LEDTask(void)
       if (HeartbeatActive)
       { 
         //reset timer
-        lTimer0 = 2000;
+        lLedTaskTimer = 2000;
       } else {
         //reset timer
-        lTimer0 = 20;
+        lLedTaskTimer = 20;
       }
       //set port
       HeartbeatSet(HeartbeatActive);
-      //invert
-      HeartbeatActive = !HeartbeatActive;      
       break;
     case LED_STATE_WAITING:
       if (HeartbeatActive)
       { 
         //reset timer
-        lTimer0 = 50;
+        lLedTaskTimer = 50;
       } else {
         //reset timer
-        lTimer0 = 100;
+        lLedTaskTimer = 100;
       }
       //set port
       HeartbeatSet(HeartbeatActive);
-      //invert
-      HeartbeatActive = !HeartbeatActive;      
       break;
     case LED_STATE_COMMIT:
       //reset timer
-      lTimer0 = 200;
+      lLedTaskTimer = 200;
       //set port
       HeartbeatSet(false);
-      //invert
-      HeartbeatActive = !HeartbeatActive;      
+      break;
+    case LED_STATE_NACK:
+      //reset timer
+      lLedTaskTimer = 300;
+      //set port
+      HeartbeatSet(HeartbeatActive);
+      if (HeartbeatNackCount > 0)
+      {
+        HeartbeatNackCount--;
+      }
+      else
+      {
+        ledActiveState = LED_STATE_IDLE;
+      }
       break;
     default:
       break;
     }
+    //invert
+    HeartbeatActive = !HeartbeatActive;      
   }
 }
 
-//timer1
 void KeybTask(void)
 { //temps
   char i = 0;
   //check keys 
-  if (lTimer1 == 0) {
+  if (lKeybTaskTimer == 0)
+  {
     //reset timer
-    lTimer1 = 40;
+    lKeybTaskTimer = 40;
     //check keypressed
     if (!keyActive && (!RuningMemory)) 
     { //loop through keys
-      for (i = 0; i<MAX_VIRTUAL_KEYS; i++) {
+      for (i = 0; i<MAX_VIRTUAL_KEYS; i++)
+      {
         //check key
         if (KeybIsKey(i)) {
           //start memory
@@ -2313,10 +2162,13 @@ void KeybTask(void)
           break;
         }
       }
-    } else {
+    }
+    else
+    {
       //wait till all keys released
       char tempKeyActive = false;
-      for (i = 0; i < MAX_VIRTUAL_KEYS; i++) {
+      for (i = 0; i < MAX_VIRTUAL_KEYS; i++)
+      {
         if (KeybIsKey(i)) 
         { //check keys
           tempKeyActive = true;
@@ -2331,138 +2183,142 @@ void KeybTask(void)
 }
 
 
-//timer1
+void setNextMemoryActiveState(unsigned char nextMemoryActiveState)
+{ // set the state
+  memoryActiveState = nextMemoryActiveState;
+  // when going back to idle also set back led tast
+  if (MEMORY_STATE_IDLE == nextMemoryActiveState)
+  {
+      ledActiveState = LED_STATE_IDLE;
+      memoryTimeout = 0;
+      FirstPressedKey = 0;
+      SecondPressedKey = 0;
+  }
+  //sync timer
+  lLedTaskTimer = 0;
+}
+
 void MemoryTask(void)
-{ //check keys 
-  if (lTimer2 == 0) {
+{ // temporary
+  unsigned char index = 0;
+  //check keys 
+  if (lMemoryTaskTimer == 0)
+  {
     //reset timer
-    lTimer2 = 100;
+    lMemoryTaskTimer = 100;
     //statemachine
     switch (memoryActiveState)
     {
     case MEMORY_STATE_IDLE:
-      //user entertainment
-      ledActiveState = LED_STATE_IDLE;
       //check if a key press is detected
-      if (RuningMemory) {
+      if (RuningMemory)
+      {
         //set next state
-        memoryActiveState = MEMORY_STATE_FIRST_KEY_AKTIVE;
-        //sync timer
-        lTimer0 = 0;
-        lTimer2 = 10;
+        setNextMemoryActiveState(MEMORY_STATE_FIRST_KEY_AKTIVE);
+        lMemoryTaskTimer = 10;
+        //user entertainment
+        ledActiveState = LED_STATE_COMMIT;
       }
-      memoryTimeout = 0;
-      FirstPressedKey = 0;
-      SecondPressedKey = 0;
       DCCToggle();
       break;
     
     case MEMORY_STATE_FIRST_KEY_AKTIVE:
-      //user entertainment
-      ledActiveState = LED_STATE_COMMIT;
       //care flags and key
       RuningMemory = false;
       FirstPressedKey = LastPressedKey;
-      if (!MemoryCareTargetlessRoutes(FirstPressedKey)) {
-        memoryActiveState = MEMORY_STATE_WAIT_AFTER;
-        //sync timer
-        lTimer0 = 0;
-      } else {
+      if (!MemoryCareTargetlessRoutes(FirstPressedKey))
+      {
+        setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
+      }
+      else
+      {
         //set next state
-        memoryActiveState = MEMORY_STATE_WAITING_SECOND_KEY;
-        //sync timer
-        lTimer0 = 0;
-        lTimer2 = 10;
+        setNextMemoryActiveState(MEMORY_STATE_WAITING_SECOND_KEY);
+        lMemoryTaskTimer = 10;
       }
       break;
     
     case MEMORY_STATE_WAITING_SECOND_KEY: 
-      //user entertainment
-      ledActiveState = LED_STATE_WAITING;
       //care timeout
-      if (memoryTimeout > 50) {
-        memoryActiveState = MEMORY_STATE_WAIT_AFTER;
-        //sync timer
-        lTimer0 = 0;
-      } else {
+      if (memoryTimeout > 50)
+      {
+        setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
+      }
+      else
+      {
         memoryTimeout++;
       }
-      if (RuningMemory) {
+      if (RuningMemory)
+      {
         //set next state
-        memoryActiveState = MEMORY_STATE_FINISH_ROUTE;
+        setNextMemoryActiveState(MEMORY_STATE_FINISH_ROUTE);
         memoryTimeout = 0;
-        //sync timer
-        lTimer0 = 0;
-        lTimer2 = 10;
+        lMemoryTaskTimer = 10;
       }
       break;
     
     case MEMORY_STATE_FINISH_ROUTE:
-      //user entertainment
-      ledActiveState = LED_STATE_WAITING;
       //care flags and key
       RuningMemory = false;
       SecondPressedKey = LastPressedKey;
       //back to idle if equal
-      if (FirstPressedKey == SecondPressedKey) {
-        memoryActiveState = MEMORY_STATE_WAIT_AFTER;
-        lTimer0 = 0;
-      } else {
+      if (FirstPressedKey == SecondPressedKey)
+      {
+        setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
+      }
+      else
+      {
         MemoryCareCompleteRoutes(FirstPressedKey, SecondPressedKey);
         //set next state
-        memoryActiveState = MEMORY_STATE_WAIT_AFTER;
+        setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
         memoryTimeout = 0;
-        //sync timer
-        lTimer0 = 0;
-        lTimer2 = 10;
+        lMemoryTaskTimer = 10;
       }
+      //user entertainment
+      ledActiveState = LED_STATE_COMMIT;
       break;
     
     case MEMORY_STATE_WAIT_AFTER:
-      //user entertainment
-      ledActiveState = LED_STATE_COMMIT;
       //empty FIFO...
-      unsigned char index = 0;
-      if (FIFOBufferOut(&index)) {
-        if ((index >= 0) && (index < MAX_MEMORY_ELEMENTS)) {
+      if (FIFOBufferOut(&index))
+      {
+        if ((index >= 0) && (index < MAX_MEMORY_ELEMENTS))
+        {
           //remember index
           memoryActualIndex = index;
           //... care wait time...
-          lTimer2 = (long)EEProm.arrMemoryElements[index].wait * 1000;
-          if (lTimer2 < 200) lTimer2 = 200;
+          lMemoryTaskTimer = (long)EEProm.arrMemoryElements[index].wait * 1000;
+          if (lMemoryTaskTimer < 200) lMemoryTaskTimer = 200;
           //switch it
-          memoryActiveState = MEMORY_STATE_SWITCH_IT;          
+          setNextMemoryActiveState(MEMORY_STATE_SWITCH_IT);
         }
       //... and leave if empty.
-      } else {
-        memoryActiveState = MEMORY_STATE_IDLE;
-        lTimer0 = 0;
+      }
+      else
+      {
+        setNextMemoryActiveState(MEMORY_STATE_IDLE);
       }
       break;
 
     case MEMORY_STATE_SWITCH_IT:
-      if ((index >= 0) && (index < MAX_MEMORY_ELEMENTS)) {
-        //... care contend...
-        DCCSwitch
-          ( (EEProm.arrMemoryElements[memoryActualIndex].dec_adr-1) / 4
-          , (EEProm.arrMemoryElements[memoryActualIndex].dec_adr-1) % 4
-          , EEProm.arrMemoryElements[memoryActualIndex].dec_state
-          );
-        //send twice to capture ESD 
-        DCCSwitch
-          ( (EEProm.arrMemoryElements[memoryActualIndex].dec_adr-1) / 4
-          , (EEProm.arrMemoryElements[memoryActualIndex].dec_adr-1) % 4
-          , EEProm.arrMemoryElements[memoryActualIndex].dec_state
-          );
-      }
+      //... care contend...
+      DCCSwitch
+        ( (EEProm.arrMemoryElements[memoryActualIndex].dec_adr-1) / 4
+        , (EEProm.arrMemoryElements[memoryActualIndex].dec_adr-1) % 4
+        , EEProm.arrMemoryElements[memoryActualIndex].dec_state
+        );
+      //send twice to capture ESD 
+      DCCSwitch
+        ( (EEProm.arrMemoryElements[memoryActualIndex].dec_adr-1) / 4
+        , (EEProm.arrMemoryElements[memoryActualIndex].dec_adr-1) % 4
+        , EEProm.arrMemoryElements[memoryActualIndex].dec_state
+        );
       //back to previous state
-      memoryActiveState = MEMORY_STATE_WAIT_AFTER;
-      lTimer2 = 10;
+      setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
+      lMemoryTaskTimer = 10;
       break;
     
     default:
-      memoryActiveState = MEMORY_STATE_IDLE;
-      memoryTimeout = 0;
       break;
     }
   }
