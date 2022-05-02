@@ -10,6 +10,8 @@
                DCC: changed sync length to 16 iterations, use utils/delay functions,
                     re-adjust DCC bit length, fix switch command (add active flag)
                GENERAL: cleanup unused functions, remove white spaces, formating, renaming
+ - (2022-4-28) SETUP: fix programmer config for USBasp (FW 2011)
+               ATMEGA8: refactor state machine, fixed memory issue (also fixes the UART)
  *******************************************************************************************
 */
 
@@ -199,7 +201,7 @@ void KeybTask(void);
 
 #ifdef __AVR_ATmega8__
   #define MAX_MEMORY_ELEMENTS                     0x8F
-  #define MAX_MEMORY_ROUTES                       120
+  #define MAX_MEMORY_ROUTES                       60
   #define MAX_KEY_GROUPS                          1
   #define MAX_REAL_KEYS                           10
 #endif
@@ -269,6 +271,7 @@ char LastPressedKey = 0;
 char FirstPressedKey = 0;
 char SecondPressedKey = 0;
 char keyActive = false;
+uint8_t indexFIFOBuffer = 0xFF;
 
 char HeartbeatActive = false;
 char HeartbeatNackCount = 0;
@@ -289,6 +292,7 @@ unsigned char ledActiveState = LED_STATE_IDLE;
 
 
 unsigned char memoryActiveState = MEMORY_STATE_IDLE;
+unsigned char memoryNextActiveState = MEMORY_STATE_IDLE;
 unsigned long memoryTimeout = 0;
 unsigned char memoryActualIndex = 0;
 
@@ -2090,7 +2094,7 @@ void LEDTask(void)
       if (HeartbeatActive)
       { 
         //reset timer
-        lLedTaskTimer = 2000;
+        lLedTaskTimer = 1980;
       } else {
         //reset timer
         lLedTaskTimer = 20;
@@ -2183,11 +2187,11 @@ void KeybTask(void)
 }
 
 
-void setNextMemoryActiveState(unsigned char nextMemoryActiveState)
+void setNextMemoryActiveState(unsigned char p_nextMemoryActiveState)
 { // set the state
-  memoryActiveState = nextMemoryActiveState;
+  memoryNextActiveState = p_nextMemoryActiveState;
   // when going back to idle also set back led tast
-  if (MEMORY_STATE_IDLE == nextMemoryActiveState)
+  if (MEMORY_STATE_IDLE == memoryNextActiveState)
   {
       ledActiveState = LED_STATE_IDLE;
       memoryTimeout = 0;
@@ -2198,129 +2202,149 @@ void setNextMemoryActiveState(unsigned char nextMemoryActiveState)
   lLedTaskTimer = 0;
 }
 
+
+void MemoryTaskStatemachine_IDLE(void)
+{
+  if (MEMORY_STATE_IDLE == memoryActiveState)
+  {
+    // check if a key press is detected
+    if (RuningMemory)
+    {
+      // set next state
+      setNextMemoryActiveState(MEMORY_STATE_FIRST_KEY_AKTIVE);
+      lMemoryTaskTimer = 10;
+      // user entertainment
+      ledActiveState = LED_STATE_COMMIT;
+    }
+    DCCToggle();
+  }
+}
+
+void MemoryTaskStatemachine_FIRST_KEY_AKTIVE(void)
+{
+  if (MEMORY_STATE_FIRST_KEY_AKTIVE == memoryActiveState)
+  {
+    //care flags and key
+    RuningMemory = false;
+    FirstPressedKey = LastPressedKey;
+    if (!MemoryCareTargetlessRoutes(FirstPressedKey))
+    {
+      setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
+    }
+    else
+    {
+      //set next state
+      setNextMemoryActiveState(MEMORY_STATE_WAITING_SECOND_KEY);
+      lMemoryTaskTimer = 10;
+    }
+  }
+}
+
+void MemoryTaskStatemachine_WAITING_SECOND_KEY(void)
+{
+  if (MEMORY_STATE_WAITING_SECOND_KEY == memoryActiveState)
+  {
+    //care timeout
+    if (memoryTimeout > 50)
+    {
+      setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
+    }
+    else
+    {
+      memoryTimeout++;
+    }
+    if (RuningMemory)
+    {
+      //set next state
+      setNextMemoryActiveState(MEMORY_STATE_FINISH_ROUTE);
+      memoryTimeout = 0;
+      lMemoryTaskTimer = 10;
+    }
+  }
+}
+
+void MemoryTaskStatemachine_FINISH_ROUTE(void)
+{
+  if (MEMORY_STATE_FINISH_ROUTE == memoryActiveState)
+  {
+    //care flags and key
+    RuningMemory = false;
+    SecondPressedKey = LastPressedKey;
+    //back to idle if equal
+    if (FirstPressedKey == SecondPressedKey)
+    {
+      setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
+    }
+    else
+    {
+      MemoryCareCompleteRoutes(FirstPressedKey, SecondPressedKey);
+      //set next state
+      setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
+      memoryTimeout = 0;
+      lMemoryTaskTimer = 10;
+    }
+    //user entertainment
+    ledActiveState = LED_STATE_COMMIT;
+  }
+}
+
+void MemoryTaskStatemachine_WAIT_AFTER(void)
+{
+  if (MEMORY_STATE_WAIT_AFTER == memoryActiveState)
+  {
+    // empty FIFO...
+    if (FIFOBufferOut(&indexFIFOBuffer))
+    {
+      if ((indexFIFOBuffer >= 0) && (indexFIFOBuffer < MAX_MEMORY_ELEMENTS))
+      {
+        // remember index
+        memoryActualIndex = indexFIFOBuffer;
+        //... care wait time...
+        lMemoryTaskTimer = (long)EEProm.arrMemoryElements[indexFIFOBuffer].wait * 1000;
+        if (lMemoryTaskTimer < 200)
+          lMemoryTaskTimer = 200;
+        // switch it
+        setNextMemoryActiveState(MEMORY_STATE_SWITCH_IT);
+      }
+      indexFIFOBuffer = 0xFF;
+      //... and leave if empty.
+    }
+    else
+    {
+      setNextMemoryActiveState(MEMORY_STATE_IDLE);
+    }
+  }
+}
+
+void MemoryTaskStatemachine_SWITCH_IT(void)
+{
+  if (MEMORY_STATE_SWITCH_IT == memoryActiveState)
+  {
+    //... care contend...
+    DCCSwitch((EEProm.arrMemoryElements[memoryActualIndex].dec_adr - 1) / 4, (EEProm.arrMemoryElements[memoryActualIndex].dec_adr - 1) % 4, EEProm.arrMemoryElements[memoryActualIndex].dec_state);
+    // send twice to capture ESD
+    DCCSwitch((EEProm.arrMemoryElements[memoryActualIndex].dec_adr - 1) / 4, (EEProm.arrMemoryElements[memoryActualIndex].dec_adr - 1) % 4, EEProm.arrMemoryElements[memoryActualIndex].dec_state);
+    // back to previous state
+    setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
+    lMemoryTaskTimer = 10;
+  }
+}
+
 void MemoryTask(void)
-{ // temporary
-  unsigned char index = 0;
+{ 
   //check keys 
   if (lMemoryTaskTimer == 0)
   {
     //reset timer
     lMemoryTaskTimer = 100;
     //statemachine
-    switch (memoryActiveState)
-    {
-    case MEMORY_STATE_IDLE:
-      //check if a key press is detected
-      if (RuningMemory)
-      {
-        //set next state
-        setNextMemoryActiveState(MEMORY_STATE_FIRST_KEY_AKTIVE);
-        lMemoryTaskTimer = 10;
-        //user entertainment
-        ledActiveState = LED_STATE_COMMIT;
-      }
-      DCCToggle();
-      break;
-    
-    case MEMORY_STATE_FIRST_KEY_AKTIVE:
-      //care flags and key
-      RuningMemory = false;
-      FirstPressedKey = LastPressedKey;
-      if (!MemoryCareTargetlessRoutes(FirstPressedKey))
-      {
-        setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
-      }
-      else
-      {
-        //set next state
-        setNextMemoryActiveState(MEMORY_STATE_WAITING_SECOND_KEY);
-        lMemoryTaskTimer = 10;
-      }
-      break;
-    
-    case MEMORY_STATE_WAITING_SECOND_KEY: 
-      //care timeout
-      if (memoryTimeout > 50)
-      {
-        setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
-      }
-      else
-      {
-        memoryTimeout++;
-      }
-      if (RuningMemory)
-      {
-        //set next state
-        setNextMemoryActiveState(MEMORY_STATE_FINISH_ROUTE);
-        memoryTimeout = 0;
-        lMemoryTaskTimer = 10;
-      }
-      break;
-    
-    case MEMORY_STATE_FINISH_ROUTE:
-      //care flags and key
-      RuningMemory = false;
-      SecondPressedKey = LastPressedKey;
-      //back to idle if equal
-      if (FirstPressedKey == SecondPressedKey)
-      {
-        setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
-      }
-      else
-      {
-        MemoryCareCompleteRoutes(FirstPressedKey, SecondPressedKey);
-        //set next state
-        setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
-        memoryTimeout = 0;
-        lMemoryTaskTimer = 10;
-      }
-      //user entertainment
-      ledActiveState = LED_STATE_COMMIT;
-      break;
-    
-    case MEMORY_STATE_WAIT_AFTER:
-      //empty FIFO...
-      if (FIFOBufferOut(&index))
-      {
-        if ((index >= 0) && (index < MAX_MEMORY_ELEMENTS))
-        {
-          //remember index
-          memoryActualIndex = index;
-          //... care wait time...
-          lMemoryTaskTimer = (long)EEProm.arrMemoryElements[index].wait * 1000;
-          if (lMemoryTaskTimer < 200) lMemoryTaskTimer = 200;
-          //switch it
-          setNextMemoryActiveState(MEMORY_STATE_SWITCH_IT);
-        }
-      //... and leave if empty.
-      }
-      else
-      {
-        setNextMemoryActiveState(MEMORY_STATE_IDLE);
-      }
-      break;
-
-    case MEMORY_STATE_SWITCH_IT:
-      //... care contend...
-      DCCSwitch
-        ( (EEProm.arrMemoryElements[memoryActualIndex].dec_adr-1) / 4
-        , (EEProm.arrMemoryElements[memoryActualIndex].dec_adr-1) % 4
-        , EEProm.arrMemoryElements[memoryActualIndex].dec_state
-        );
-      //send twice to capture ESD 
-      DCCSwitch
-        ( (EEProm.arrMemoryElements[memoryActualIndex].dec_adr-1) / 4
-        , (EEProm.arrMemoryElements[memoryActualIndex].dec_adr-1) % 4
-        , EEProm.arrMemoryElements[memoryActualIndex].dec_state
-        );
-      //back to previous state
-      setNextMemoryActiveState(MEMORY_STATE_WAIT_AFTER);
-      lMemoryTaskTimer = 10;
-      break;
-    
-    default:
-      break;
-    }
+    MemoryTaskStatemachine_IDLE();
+    MemoryTaskStatemachine_FIRST_KEY_AKTIVE();
+    MemoryTaskStatemachine_WAITING_SECOND_KEY();
+    MemoryTaskStatemachine_FINISH_ROUTE();
+    MemoryTaskStatemachine_WAIT_AFTER();
+    MemoryTaskStatemachine_SWITCH_IT();
+    memoryActiveState = memoryNextActiveState;
   }
 }
 
