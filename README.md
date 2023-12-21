@@ -15,8 +15,10 @@ Toolchain (PlatformIo)
 - install PlatformIO Extension via Extension Manager (left toolbar). Wait til its installed completely (Icon appears in left toolbar)!
 - clone, pull and open workspace dcc_gen
 - Build it (bottom bar tick icon)Toolchain
-- install driver for USBProg 3.0 (https://zadig.akeo.ie/), libusb-win32 v1.2.6.0 works for me 
-- use "Upload using Programmer" in Tasks by click on the PlatformIo Icon (Note: returns an error even if the upload was succesful)
+- install driver for USBasp with Zadig (https://zadig.akeo.ie/)
+  == USBasp (HK version with fischl.de FW): more or less working with: WinUSB v6.1.7600 and libusb_win32, somehow unreliable
+  == USBProg 3 running with modified config (check for platformio.ini)
+- use "Upload" in Tasks by click on the PlatformIo Icon (Note: returns an error even if the upload was succesful), check avrdude output!
 
 Toolchain Linux (_Archive)
 - sudo aptitude install avr-libc avrdude gcc-avr simulavr
