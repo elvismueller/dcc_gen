@@ -4,6 +4,7 @@
  - new uC: ATMEGA32
  - Start-Target Feature
  - improved Console Functions
+ - add parameter to switch off idle toggle, add toggle for switches, fix delays, optimize flash
  *******************************************************************************************
 */
 
@@ -95,8 +96,7 @@ void DCCToggle(void);
 
 //delay functions
 void delay_1ms(unsigned int uiDuration);
-void delay_58us(void);
-void delay_56us(void);
+void delay_us(unsigned int uiDuration);
 
 //UART functions
 void           UARTInit(void);
@@ -144,6 +144,7 @@ void           UARTSendMemoryElements(void);
 void           UARTSendMemoryRoutes(void);
 char           UARTSendMemoryTrace(unsigned char route);
 void           UARTSendMemoryOverview(void);
+char           UARTToggleSwitches(unsigned char fromSwitch, unsigned char toSwitch);
 
 //define stream for printf
 static FILE uart_stream = FDEV_SETUP_STREAM((void *)UARTTransmit,NULL, _FDEV_SETUP_RW);
@@ -301,6 +302,7 @@ char LastPressedKey = 0;
 char FirstPressedKey = 0;
 char SecondPressedKey = 0;
 char keyActive = false;
+char toggleActive = true;
 
 char HeartbeatActive = false;
 
@@ -316,7 +318,6 @@ unsigned char ledActiveState = LED_STATE_IDLE;
 #define MEMORY_STATE_FINISH_ROUTE       3
 #define MEMORY_STATE_WAIT_AFTER         4
 #define MEMORY_STATE_SWITCH_IT          5
-
 
 unsigned char memoryActiveState = MEMORY_STATE_IDLE;
 unsigned long memoryTimeout = 0;
@@ -493,24 +494,22 @@ void DCCBitOne(void)
 { //set ports
   DCCSet();
   //wait 58us
-  delay_58us();
+  delay_us(56);
   //delete ports
   DCCDelete();
   //wait 58us
-  delay_56us();
+  delay_us(51);
 }
 
 void DCCBitZero(void)
 { //set ports
   DCCSet();
   //wait 58us
-  delay_58us();
-  delay_56us();
+  delay_us(114);
   //delete ports
   DCCDelete();
   //wait 58us
-  delay_56us();
-  delay_56us();
+  delay_us(105);
 
 }
 
@@ -661,39 +660,38 @@ uint8_t FIFOBufferOut(uint8_t *pByte)
 //******************************************************************************************
 void Selftest(void)
 { //just tell i am alive by blinking three times
-  HeartbeatSet(0);
-  delay_1ms(200);
-  HeartbeatSet(1);
-  delay_1ms(200);
-  HeartbeatSet(0);
-  delay_1ms(200);
-  HeartbeatSet(1);
-  delay_1ms(200);
-  HeartbeatSet(0);
-  delay_1ms(200);
-  HeartbeatSet(1);
-  delay_1ms(200);
+  #ifdef __AVR_ATmega32__
+    HeartbeatSet(0);
+    delay_1ms(200);
+    HeartbeatSet(1);
+    delay_1ms(200);
+    HeartbeatSet(0);
+    delay_1ms(200);
+    HeartbeatSet(1);
+    delay_1ms(200);
+    HeartbeatSet(0);
+    delay_1ms(200);
+    HeartbeatSet(1);
+    delay_1ms(200);
+  #endif
 }
+
+#define nop() asm volatile("nop")
 
 //very simple delay
 //based on: for (i=10000;i;i--); //ca. 181ms
 void delay_1ms(unsigned int uiDuration) 
 {
-  int i;
+  unsigned int i;
   unsigned int j;
   for (j=uiDuration;j;j--) {
-    for (i=443;i;i--); //loops nearly 1ms at 8Mhz Crystal
+    for (i=796;i;i--) nop(); //loops nearly 1ms at 8Mhz Crystal
   }
 }
-void delay_58us(void) 
+void delay_us(unsigned int uiDuration) 
 {
-  int i;
-  for (i=20;i;i--); //loops nearly 58us at 8Mhz Crystal
-}
-void delay_56us(void) 
-{
-  int i;
-  for (i=18;i;i--); //loops nearly 56us at 8Mhz Crystal
+  unsigned int i;
+  for (i=uiDuration;i;i--) nop(); //loops nearly 58us at 8Mhz Crystal
 }
 
 //******************************************************************************************
@@ -762,8 +760,8 @@ void UARTSendString(char * pStr)
 
 void UARTHello(void) {
   //hello world
-  printf_P(PSTR("\x1B[2J\x1B[Hdcc_gen v%u.%u ATMega%u\n\r" ), VERSION, SUBVERSION, MEGA_CPU);
   #ifdef __AVR_ATmega32__
+    printf_P(PSTR("\x1B[2J\x1B[Hdcc_gen v%u.%u ATMega%u\n\r" ), VERSION, SUBVERSION, MEGA_CPU);
     printf_P(PSTR("type '?' for help...\n\r"));
   #endif
 }
@@ -1156,6 +1154,19 @@ void UARTSendMemoryOverview()
   #endif
 }
 
+char UARTToggleSwitches(unsigned char fromSwitch, unsigned char toSwitch)
+{
+  char accepted = true;
+  for (unsigned char j = 0; j < 2; j++)
+  {
+    for (unsigned char i = fromSwitch; i < toSwitch; i++)
+    {
+      accepted = DCCSwitch( i/4, i%4, j) && accepted;
+      delay_1ms(2000);
+    }
+  }
+  return accepted;
+}
 
 void UARTCheckCommand(void) 
 { //temps
@@ -1176,6 +1187,10 @@ void UARTCheckCommand(void)
         , (GetTokenToUChar(UARTReceiveBuffer, 2)-1)%4
         , GetTokenToUChar(UARTReceiveBuffer, 3)
         );
+      break;
+    case 'D':
+      // toggle idle output
+      toggleActive = !toggleActive;
       break;
     case 'I':
       //answer
@@ -1283,6 +1298,15 @@ void UARTCheckCommand(void)
         #endif
       }
       break;
+      case 'Z':
+      // toggle all switches
+      {
+        accepted = UARTToggleSwitches
+          ( GetTokenToUChar(UARTReceiveBuffer, 2)
+          , GetTokenToUChar(UARTReceiveBuffer, 3)
+          );
+      }
+      break;
     default:
       break;
     }
@@ -1325,6 +1349,9 @@ void UARTSendHelp(void)
   printf_P(PSTR("MC;42   Alle Daten loeschen (initialisieren subcmd: 84 = stapel, 42, 21)\n\r"            ));
   printf_P(PSTR("MT      trace routes and list 'em (add nr for single ond)\n\r"                           ));
   printf_P(PSTR("MO      show amount of used memory\n\r"                                                  ));
+  printf_P(PSTR("MZ;<MA-Adresse From>;<MA-Adresse To>\n\r"                                                ));
+  printf_P(PSTR("        toggle all switches in the given range\n\r"                                      ));
+  printf_P(PSTR("MD      switch off/on output toggle in idle\n\r"                                         ));
   printf_P(PSTR("\n\r"                                                                                    ));
   printf_P(PSTR("Beispiel:\n\r"                                                                           ));
   printf_P(PSTR("MA;1;1    -> Schaltet die erste Weiche auf rot\n\r"                                      ));
@@ -1898,7 +1925,6 @@ void MemoryStapelInit9(void)
   MemorySetElementWait(178, 56, 36, 0, 0, true);
 }
 
-
 void MemoryStapelInit10(void)
 {
   MemorySetRoute  ( 57, 1,  3, false, true);
@@ -2006,15 +2032,17 @@ void MemoryTestInit(char token)
     MemorySetElement(7, 5, 2, 0);
     MemorySetElement(8, 6, 3, 0);
   }
-  if (token == 21)
-  {
-    char i;
-    for (i = 0; i < 80; i++)
+  #ifdef __AVR_ATmega32__
+    if (token == 21)
     {
-      MemorySetRoute(i+1, i+1, 0, false, false);      
-      MemorySetElement(i+1, i+1, (i/2)+1, i%2);
+      char i;
+      for (i = 0; i < 80; i++)
+      {
+        MemorySetRoute(i+1, i+1, 0, false, false);      
+        MemorySetElement(i+1, i+1, (i/2)+1, i%2);
+      }
     }
-  }
+  #endif
   //tell user
   #ifdef __AVR_ATmega32__
     printf_P(PSTR("Memory initial filled!\n\r"));
@@ -2354,7 +2382,10 @@ void MemoryTask(void)
       memoryTimeout = 0;
       FirstPressedKey = 0;
       SecondPressedKey = 0;
-      DCCToggle();
+      if (toggleActive) 
+      {
+        DCCToggle();
+      }
       break;
     
     case MEMORY_STATE_FIRST_KEY_AKTIVE:
