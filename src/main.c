@@ -104,7 +104,7 @@ char DCCSwitch
 void DCCToggle(void);
 
 //delay functions
-void delay_1ms(unsigned int uiDuration);
+void delay_ms(unsigned int uiDuration);
 void delay_us(unsigned int uiDuration);
 
 //UART functions
@@ -667,7 +667,7 @@ void delay_ms(unsigned int uiDuration)
     for (i=796;i;i--) nop(); //loops nearly 1ms at 8Mhz Crystal
   }
 }
-void delay_us(unsigned int uiDuration) 
+
 void delay_us(unsigned int uiDuration) 
 {
   unsigned int i;
@@ -996,8 +996,8 @@ void UARTSendMemoryOverview()
       , count1
       , (unsigned char)(((float)count1*100.0)/(float)MAX_MEMORY_ROUTES)
       );
-  #endif
-  #ifdef __AVR_ATmega8__
+  //#endif
+  //#ifdef __AVR_ATmega8__
     printf_P
       ( PSTR("El:%u(%u%%) Rt:%u(%u%%)\n\r")
       , count2
@@ -1016,7 +1016,7 @@ char UARTToggleSwitches(unsigned char fromSwitch, unsigned char toSwitch)
     for (unsigned char i = fromSwitch; i < toSwitch; i++)
     {
       accepted = DCCSwitch( i/4, i%4, j) && accepted;
-      delay_1ms(2000);
+      delay_ms(2000);
     }
   }
   return accepted;
@@ -2231,7 +2231,6 @@ void KeybTask(void)
   }
 }
 
-
 void setNextMemoryActiveState(unsigned char p_nextMemoryActiveState)
 { // set the state
   memoryNextActiveState = p_nextMemoryActiveState;
@@ -2242,17 +2241,29 @@ void setNextMemoryActiveState(unsigned char p_nextMemoryActiveState)
       memoryTimeout = 0;
       FirstPressedKey = 0;
       SecondPressedKey = 0;
-      if (toggleActive) 
-      {
-        DCCToggle();
-      }
-      break;
-    
-    case MEMORY_STATE_FIRST_KEY_AKTIVE:
-      //user entertainment
+  }
+  //sync timer
+  lLedTaskTimer = 0;
+}
+
+
+void MemoryTaskStatemachine_IDLE(void)
+{
+  if (MEMORY_STATE_IDLE == memoryActiveState)
+  {
+    // check if a key press is detected
+    if (RuningMemory)
+    {
+      // set next state
+      setNextMemoryActiveState(MEMORY_STATE_FIRST_KEY_AKTIVE);
+      lMemoryTaskTimer = 10;
+      // user entertainment
       ledActiveState = LED_STATE_COMMIT;
     }
-    DCCToggle();
+    if (toggleActive) 
+    {
+      DCCToggle();
+    }
   }
 }
 
