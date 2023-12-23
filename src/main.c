@@ -15,10 +15,6 @@
  - (2023-12-21 add parameter to switch off idle toggle, add toggle for switches, fix delays, optimize flash
  *******************************************************************************************
 */
-
-#define	__AVR_ATmega8__	1
-//#define	__AVR_ATmega32__	1
-
 #define VERSION 3
 #define SUBVERSION 1
 #ifdef __AVR_ATmega32__
@@ -27,7 +23,6 @@
 #ifdef __AVR_ATmega8__
   #define MEGA_CPU 8
 #endif
-
 
 #ifdef __AVR_ATmega32__
  #define PIN_OUT1 PD2
@@ -108,20 +103,20 @@ void delay_ms(unsigned int uiDuration);
 void delay_us(unsigned int uiDuration);
 
 //UART functions
-void           UARTInit(void);
-char           UARTReceive(void);
-char           UARTGetC(void);
-void           UARTTransmit(char data);
-void           UARTSendString(const char * pStr);
-void           UARTHello(void);
-void           UARTCheckCommand(void);
-void           UARTSendHelp(void); 
-void           UARTComunicate(void);
-void           UARTSendMemoryElements(void);
-void           UARTSendMemoryRoutes(void);
-char           UARTSendMemoryTrace(unsigned char route);
-void           UARTSendMemoryOverview(void);
-char           UARTToggleSwitches(unsigned char fromSwitch, unsigned char toSwitch);
+void UARTInit(void);
+char UARTReceive(void);
+char UARTGetC(void);
+void UARTTransmit(char data);
+void UARTSendString(const char * pStr);
+void UARTHello(void);
+void UARTCheckCommand(void);
+void UARTSendHelp(void); 
+void UARTComunicate(void);
+void UARTSendMemoryElements(void);
+void UARTSendMemoryRoutes(void);
+char UARTSendMemoryTrace(unsigned char route);
+void UARTSendMemoryOverview(void);
+char UARTToggleSwitches(unsigned char fromSwitch, unsigned char toSwitch);
 
 //define stream for printf
 static FILE uart_stream = FDEV_SETUP_STREAM((void *)UARTTransmit,NULL, _FDEV_SETUP_RW);
