@@ -1,0 +1,15 @@
+Dokumentation Revision 1
+- Watchdog IC entfernen, wird nicht benötigt
+- RL1, RL2 entfernen oder verkleinern
+- SV4 (Taster) entfernen, wird nicht benötigt
+- IC3P Gate mit Blockkondensator hinzugefügt
+- Pullups auf 1.5kOhm geändert
+- ISP mit Wannenstecker
+- Diverse Änderungen am Layout
+  - Kondensatoren um Max232 optimieren
+  - RL1, RL2
+  - entfernte Bauteile reroute
+
+Nach Untersuchungen mit Tastaturerweiterung ggfs. nochmal überarbeiten!
+
+GGfs. ISP Entfernen oder Lötpads
