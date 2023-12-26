@@ -1526,162 +1526,192 @@ char MemorySaveToEEprom(void)
   return bRet;
 }
 
+/*
+                                       Born as DER STAPELMUELLER and now known as the STAPELHERBST ;-)
+
+                     {T18 ws}             .--------- {T09 rt} --- Gl. 01 (R33) --- {T03 sw} ---------.      R31 (Polrelais 1-6)
+                                         /                                                            \
+                                        /       .--- {T10 rt} --- Gl. 02 (R34) --- {T04 sw} ---.       \
+                                       /   W20 /                                                \ W04   \
+                                  W19 /-------/----- {T11 rt} --- Gl. 03 (R35) --- {T05 sw} -----\-------\ W02
+                                     /                                                                    \
+                                    /       .------- {T12 rt} --- Gl. 04 (R37) --- {T06 sw} -------.       \
+                                   /       /                                                        \       \
+                                  /   W21 /--------- {T13 rt} --- Gl. 05 (R23) --- {T07 sw} ---------\ W10   \
+                                 /       /                                                            \       \   W42   W41
+--- Gl. 26 {T15 gl} ------------/-------/----------- {T14 rt} --- Gl. 06 (R24) --- {T08 sw} -----------\-------\---\----/--- Gl. 16a --- {T02 rt} {T01 sw} Gl. 16 ---
+                              W17     W18                                                             W03     W01   \  /
+                                                                                                                     >< W45
+                              W13     W15                                                             W07     W05   /  \
+--- Gl. 27 {T16 sw} {T17 rt} ---\-------\----------- {T19 sw} --- Gl. 07 (R25) --- {T25 rt} -----------/-------/---/----\--- Gl. 17a ------------ {T32 gl} Gl. 17 ---
+                                 \       \                                                            /       /   W44   W43
+                                  \   W22 \--------- {T20 sw} --- Gl. 08 (R26) --- {T26 rt} ---------/ W09   /
+                                   \       \                                                        /       /
+                                    \       `------- {T21 sw} --- Gl. 09 (R27) --- {T27 rt} -------´       /
+                                     \                                                                    /
+                                  W14 \-------\----- {T22 sw} --- Gl. 10 (R28) --- {T28 rt} -----/-------/ W06
+                                       \   W16 \                                                / W08   /
+                                        \       `--- {T23 sw} --- Gl. 11 (R29) --- {T29 rt} ---´       /
+                                         \                                                            /
+             R32 (Polrelais 7-12)         `--------- {T24 sw} --- Gl. 12 (R30) --- {T30 rt} ---------´           {T31 ws}
+*/
+
 #ifdef __AVR_ATmega32__
 void MemoryStapelInit1(void)
-{ 
-  MemorySetRoute  ( 1,  50,  51, false, false);
+{                                                // Einfahrten Gleis 1-6 (keine realen Taster, forwarded über Hosentraeger)
+  MemorySetRoute  ( 1,  50,  51, false, false);  // Gleis 16a -> Gleis 1
   MemorySetElement( 1,  1,  1, 0);
   MemorySetElement( 2,  1,  2, 0);
   MemorySetElementWait(3,  1, 33, 1, 2, 0);    
-  MemorySetRoute  ( 2,  50,  51, false, false);
+  MemorySetRoute  ( 2,  50,  51, false, false);  // Gleis 16a -> Gleis 2
   MemorySetElement( 4,  2,  1, 0);
   MemorySetElement( 5,  2,  2, 1);
   MemorySetElement( 6,  2,  4, 0);
   MemorySetElementWait(7,  2, 34, 1, 2, 0);
-  MemorySetRoute  ( 3,  50,  51, false, false);
+  MemorySetRoute  ( 3,  50,  51, false, false);  // Gleis 16a -> Gleis 3
   MemorySetElement( 8,  3,  1, 0);
   MemorySetElement( 9,  3,  2, 1);
   MemorySetElement(10,  3,  4, 1);
   MemorySetElementWait(11,  3, 35, 1, 2, 0);
-  MemorySetRoute  ( 4,  50,  51, false, false);
+  MemorySetRoute  ( 4,  50,  51, false, false);  // Gleis 16a -> Gleis 4
   MemorySetElement(12,  4,  1, 1);
   MemorySetElement(13,  4,  3, 0);
   MemorySetElement(14,  4, 10, 1);
   MemorySetElementWait(15,  4, 36, 1, 2, 0);
-  MemorySetRoute  ( 5,  50,  51, false, false);
+  MemorySetRoute  ( 5,  50,  51, false, false);  // Gleis 16a -> Gleis 5
   MemorySetElement(16,  5,  1, 1);
   MemorySetElement(17,  5,  3, 0);
   MemorySetElement(18,  5, 10, 0);
   MemorySetElementWait(19,  5, 23, 1, 2, 0);
-  MemorySetRoute  ( 6,  50,  51, false, false);
+  MemorySetRoute  ( 6,  50,  51, false, false);  // Gleis 16a -> Gleis 6
   MemorySetElement(20,  6,  1, 1);
   MemorySetElement(21,  6,  3, 1);
   MemorySetElementWait(22,  6, 24, 1, 2, 0);
 }
 
 void MemoryStapelInit2(void)
-{
-  MemorySetRoute  ( 7,  9,  0, false, false);
+{                                             // Stop (stromlos) Gleis 1-6
+  MemorySetRoute  ( 7,  9,  0, false, false); // Stop Gleis 1
   MemorySetElement(23,  7, 33, 0);
-  MemorySetRoute  ( 8, 10,  0, false, false);
+  MemorySetRoute  ( 8, 10,  0, false, false); // Stop Gleis 2
   MemorySetElement(24,  8, 34, 0);
-  MemorySetRoute  ( 9, 11,  0, false, false);
+  MemorySetRoute  ( 9, 11,  0, false, false); // Stop Gleis 3
   MemorySetElement(25,  9, 35, 0);
-  MemorySetRoute  (10, 12,  0, false, false);
+  MemorySetRoute  (10, 12,  0, false, false); // Stop Gleis 4
   MemorySetElement(26, 10, 36, 0);
-  MemorySetRoute  (11, 13,  0, false, false);
+  MemorySetRoute  (11, 13,  0, false, false); // Stop Gleis 5
   MemorySetElement(27, 11, 23, 0);
-  MemorySetRoute  (12, 14,  0, false, false);
+  MemorySetRoute  (12, 14,  0, false, false); // Stop Gleis 6
   MemorySetElement(28, 12, 24, 0);
 }
 
 void MemoryStapelInit3(void)
-{
-  MemorySetRoute  (13,  3, 15, false, true);
+{                                             // Ausfahrten Gleis 1-6
+  MemorySetRoute  (13,  3, 15, false, true);  // Gleis 1 -> Gleis 26
   MemorySetElement(29, 13, 17, 0);
   MemorySetElement(30, 13, 19, 0);
   MemorySetElementWait(31, 13, 33, 1, 2, 0);    
-  MemorySetRoute  (14,  4, 15, false, true);
+  MemorySetRoute  (14,  4, 15, false, true);  // Gleis 2 -> Gleis 26
   MemorySetElement(32, 14, 17, 0);
   MemorySetElement(33, 14, 19, 1);
   MemorySetElement(34, 14, 20, 0);
   MemorySetElementWait(35, 14, 34, 1, 2, 0);
-  MemorySetRoute  (15,  5, 15, false, true);
+  MemorySetRoute  (15,  5, 15, false, true);  // Gleis 3 -> Gleis 26
   MemorySetElement(36, 15, 17, 0);
   MemorySetElement(37, 15, 19, 1);
   MemorySetElement(38, 15, 20, 1);
   MemorySetElementWait(39, 15, 35, 1, 2, 0);
-  MemorySetRoute  (16,  6, 15, false, true);
+  MemorySetRoute  (16,  6, 15, false, true);  // Gleis 4 -> Gleis 26
   MemorySetElement(40, 16, 17, 1);
   MemorySetElement(41, 16, 18, 0);
   MemorySetElement(42, 16, 21, 1);
   MemorySetElementWait(43, 16, 36, 1, 2, 0);
-  MemorySetRoute  (17,  7, 15, false, true);
+  MemorySetRoute  (17,  7, 15, false, true);  // Gleis 5 -> Gleis 26
   MemorySetElement(44, 17, 17, 1);
   MemorySetElement(45, 17, 18, 0);
   MemorySetElement(46, 17, 21, 0);
   MemorySetElementWait(47, 17, 23, 1, 2, 0);
-  MemorySetRoute  (18,  8, 15, false, true);
+  MemorySetRoute  (18,  8, 15, false, true);  // Gleis 6 -> Gleis 26
   MemorySetElement(48, 18, 17, 1);
   MemorySetElement(49, 18, 18, 1);
   MemorySetElementWait(50, 18, 24, 1, 2, 0);
 }
 
 void MemoryStapelInit4(void)
-{ 
-  MemorySetRoute  (19, 16, 24, false, true);
+{                                             // Einfahrten Gleis 7-12
+  MemorySetRoute  (19, 16, 24, false, true);  // Gleis 27 -> Gleis 7
   MemorySetElement(51, 19, 13, 0);
   MemorySetElement(52, 19, 14, 0);
   MemorySetElementWait(53, 19, 25, 1, 2, 0);    
-  MemorySetRoute  (20, 16, 23, false, true);
+  MemorySetRoute  (20, 16, 23, false, true);  // Gleis 27 -> Gleis 8
   MemorySetElement(54, 20, 13, 0);
   MemorySetElement(55, 20, 14, 1);
   MemorySetElement(56, 20, 16, 0);
   MemorySetElementWait(57, 20, 26, 1, 2, 0);
-  MemorySetRoute  (21, 16, 22, false, true);
+  MemorySetRoute  (21, 16, 22, false, true);  // Gleis 27 -> Gleis 9
   MemorySetElement(58, 21, 13, 0);
   MemorySetElement(59, 21, 14, 1);
   MemorySetElement(60, 21, 16, 1);
   MemorySetElementWait(61, 21, 27, 1, 2 ,0);
-  MemorySetRoute  (22, 16, 21, false, true);
+  MemorySetRoute  (22, 16, 21, false, true);  // Gleis 27 -> Gleis 10
   MemorySetElement(62, 22, 13, 1);
   MemorySetElement(63, 22, 15, 0);
   MemorySetElement(64, 22, 22, 1);
   MemorySetElementWait(65, 22, 28, 1, 2, 0);
-  MemorySetRoute  (23, 16, 20, false, true);
+  MemorySetRoute  (23, 16, 20, false, true);  // Gleis 27 -> Gleis 11
   MemorySetElement(66, 23, 13, 1);
   MemorySetElement(67, 23, 15, 0);
   MemorySetElement(68, 23, 22, 0);
   MemorySetElementWait(69, 23, 29, 1, 2, 0);
-  MemorySetRoute  (24, 16, 19, false, true);
+  MemorySetRoute  (24, 16, 19, false, true);  // Gleis 27 -> Gleis 12
   MemorySetElement(70, 24, 13, 1);
   MemorySetElement(71, 24, 15, 1);
   MemorySetElementWait(72, 24, 30, 1, 2, 0);
 }
 
 void MemoryStapelInit5(void)
-{
-  MemorySetRoute  (25, 30,  0, false, false);
+{                                              // Stop (stromlos) Gleis 7-12
+  MemorySetRoute  (25, 30,  0, false, false);  // Stop Gleis 12
   MemorySetElement(73, 25, 25, 0);
-  MemorySetRoute  (26, 29,  0, false, false);
+  MemorySetRoute  (26, 29,  0, false, false);  // Stop Gleis 11
   MemorySetElement(74, 26, 26, 0);
-  MemorySetRoute  (27, 28,  0, false, false);
+  MemorySetRoute  (27, 28,  0, false, false);  // Stop Gleis 10
   MemorySetElement(75, 27, 27, 0);
-  MemorySetRoute  (28, 27,  0, false, false);
+  MemorySetRoute  (28, 27,  0, false, false);  // Stop Gleis 9
   MemorySetElement(76, 28, 28, 0);
-  MemorySetRoute  (29, 26,  0, false, false);
+  MemorySetRoute  (29, 26,  0, false, false);  // Stop Gleis 8
   MemorySetElement(77, 29, 29, 0);
-  MemorySetRoute  (30, 25,  0, false, false);
+  MemorySetRoute  (30, 25,  0, false, false);  // Stop Gleis 7
   MemorySetElement(78, 30, 30, 0);
 }
 
 void MemoryStapelInit6(void)
-{
-  MemorySetRoute  (31, 124, 82, true, true);
+{                                             // Ausfahrten Gleis 7-12 (keine realen Taster, forwarded über Hosentraeger)
+  MemorySetRoute  (31, 124, 82, true, true);  // Gleis 12 -> Gleis 17a
   MemorySetElement(79, 31,  5, 0);
   MemorySetElement(80, 31,  6, 0);
   MemorySetElementWait(81, 31, 25, 1, 2, 0);    
-  MemorySetRoute  (32, 123, 82, true, true);
+  MemorySetRoute  (32, 123, 82, true, true);  // Gleis 12 -> Gleis 17a
   MemorySetElement(82, 32,  5, 0);
   MemorySetElement(83, 32,  6, 1);
   MemorySetElement(84, 32,  8, 0);
   MemorySetElementWait(85, 32, 26, 1, 2, 0);
-  MemorySetRoute  (33, 122, 82, true, true);
+  MemorySetRoute  (33, 122, 82, true, true);  // Gleis 12 -> Gleis 17a
   MemorySetElement(86, 33,  5, 0);
   MemorySetElement(87, 33,  6, 1);
   MemorySetElement(88, 33,  8, 1);
   MemorySetElementWait(89, 33, 27, 1, 2, 0);
-  MemorySetRoute  (34, 121, 82, true, true);
+  MemorySetRoute  (34, 121, 82, true, true);  // Gleis 12 -> Gleis 17a
   MemorySetElement(90, 34,  5, 1);
   MemorySetElement(91, 34,  7, 0);
   MemorySetElement(92, 34,  9, 1);
   MemorySetElementWait(93, 34, 28, 1, 2, 0);
-  MemorySetRoute  (35, 120, 82, true, true);
+  MemorySetRoute  (35, 120, 82, true, true);  // Gleis 12 -> Gleis 17a
   MemorySetElement(94, 35,  5, 1);
   MemorySetElement(95, 35,  7, 0);
   MemorySetElement(96, 35,  9, 0);
   MemorySetElementWait(97, 35, 29, 1, 2, 0);
-  MemorySetRoute  (36, 119, 82, true, true);
+  MemorySetRoute  (36, 119, 82, true, true);  // Gleis 12 -> Gleis 17a
   MemorySetElement(98, 36,  5, 1);
   MemorySetElement(99, 36,  7, 1);
   MemorySetElementWait(100, 36, 30, 1, 2, 0);
@@ -1689,7 +1719,7 @@ void MemoryStapelInit6(void)
 
 void MemoryStapelInit7(void)
 {
-  MemorySetRoute  ( 37, 18,  0, false, false);
+  MemorySetRoute  ( 37, 18,  0, false, false);  // Not-Stop (stromlos) Gleis 1-6
   MemorySetElement(101, 37, 33, 0);
   MemorySetElement(102, 37, 34, 0);
   MemorySetElement(103, 37, 35, 0);
@@ -1697,7 +1727,7 @@ void MemoryStapelInit7(void)
   MemorySetElement(105, 37, 23, 0);
   MemorySetElement(106, 37, 24, 0);
 
-  MemorySetRoute  ( 38, 31,  0, false, false);
+  MemorySetRoute  ( 38, 31,  0, false, false);  // Not-Stop (stromlos) Gleis 7-12
   MemorySetElement(107, 38, 25, 0);
   MemorySetElement(108, 38, 26, 0);
   MemorySetElement(109, 38, 27, 0);
@@ -1713,20 +1743,20 @@ void MemoryStapelInit7(void)
 }
 
 void MemoryStapelInit8(void)
-{
-  MemorySetRoute  ( 41, 33, 36, true, true);
+{                                                  // Fahrstrassen Hosentraeger
+  MemorySetRoute  ( 41, 33, 36, true, true);       // kreuzen 1-6 -> 17
   MemorySetElement(115, 41, 42, 1);
   MemorySetElement(116, 41, 43, 1);
   MemorySetElement(117, 41, 44, 0);
   MemorySetElement(118, 41, 41, 0);
   MemorySetElement(119, 41, 45, 0);
-  MemorySetRoute  ( 42, 35, 34, true, true);
+  MemorySetRoute  ( 42, 35, 34, true, true);       // kreuzen 7-12 -> 16
   MemorySetElement(120, 42, 44, 1);
   MemorySetElement(121, 42, 41, 1);
   MemorySetElement(122, 42, 42, 0);
   MemorySetElement(123, 42, 43, 0);
   MemorySetElement(124, 42, 45, 1);
-  MemorySetRoute  ( 43, 33, 34, true, true);
+  MemorySetRoute  ( 43, 33, 34, true, true);       // gerade 1-6 -> 16 bzw. 7-12 -> 17
   MemorySetElement(125, 43, 44, 1);
   MemorySetElement(126, 43, 41, 1);
   MemorySetElement(127, 43, 42, 1);
@@ -1737,126 +1767,128 @@ void MemoryStapelInit8(void)
 }
 
 void MemoryStapelInit9(void)
-{
-  MemorySetRoute  (     45,  3, 32, false, true);
-  MemorySetElement(    143, 45, 32, 0);
-  MemorySetElementWait(144, 45, 41, 0, 0, true);
-  MemorySetElementWait(145, 45,  1, 0, 0, true);
-  MemorySetRoute  (     46,  4, 32, false, true);
-  MemorySetElement(    146, 46, 32, 0);
-  MemorySetElementWait(147, 46, 41, 0, 0, true);
-  MemorySetElementWait(148, 46,  2, 0, 0, true);
-  MemorySetRoute  (     47,  5, 32, false, true);
-  MemorySetElement(    149, 47, 32, 0);
-  MemorySetElementWait(150, 47, 41, 0, 0, true);
-  MemorySetElementWait(151, 47,  3, 0, 0, true);
-  MemorySetRoute  (     48,  6, 32, false, true);
-  MemorySetElement(    152, 48, 32, 0);
-  MemorySetElementWait(153, 48, 41, 0, 0, true);
-  MemorySetElementWait(154, 48,  4, 0, 0, true);
-  MemorySetRoute  (     49,  7, 32, false, true);
-  MemorySetElement(    155, 49, 32, 0);
-  MemorySetElementWait(156, 49, 41, 0, 0, true);
-  MemorySetElementWait(157, 49,  5, 0, 0, true);
-  MemorySetRoute  (     50,  8, 32, false, true);
-  MemorySetElement(    158, 50, 32, 0);
-  MemorySetElementWait(159, 50, 41, 0, 0, true);
-  MemorySetElementWait(160, 50,  6, 0, 0, true);
+{                                                  // Ausfahrten Gleis 1-6 über Hosentraeger kreuzend nach Gleis 17
+  MemorySetRoute  (     45,  3, 32, false, true);  // Gleis 1 -> Gleis 17
+  MemorySetElement(    143, 45, 32, 0);            // --invert 1-6
+  MemorySetElementWait(144, 45, 41, 0, 0, true);   // --fw #41
+  MemorySetElementWait(145, 45,  1, 0, 0, true);   // --fw #1
+  MemorySetRoute  (     46,  4, 32, false, true);  // Gleis 2 -> Gleis 17
+  MemorySetElement(    146, 46, 32, 0);            // --invert 1-6
+  MemorySetElementWait(147, 46, 41, 0, 0, true);   // --fw #41
+  MemorySetElementWait(148, 46,  2, 0, 0, true);   // --fw #2
+  MemorySetRoute  (     47,  5, 32, false, true);  // Gleis 3 -> Gleis 17
+  MemorySetElement(    149, 47, 32, 0);            // --invert 1-6
+  MemorySetElementWait(150, 47, 41, 0, 0, true);   // --fw #41
+  MemorySetElementWait(151, 47,  3, 0, 0, true);   // --fw #3
+  MemorySetRoute  (     48,  6, 32, false, true);  // Gleis 4 -> Gleis 17
+  MemorySetElement(    152, 48, 32, 0);            // --invert 1-6
+  MemorySetElementWait(153, 48, 41, 0, 0, true);   // --fw #41
+  MemorySetElementWait(154, 48,  4, 0, 0, true);   // --fw #4
+  MemorySetRoute  (     49,  7, 32, false, true);  // Gleis 5 -> Gleis 17
+  MemorySetElement(    155, 49, 32, 0);            // --invert 1-6
+  MemorySetElementWait(156, 49, 41, 0, 0, true);   // --fw #41
+  MemorySetElementWait(157, 49,  5, 0, 0, true);   // --fw #5
+  MemorySetRoute  (     50,  8, 32, false, true);  // Gleis 6 -> Gleis 17
+  MemorySetElement(    158, 50, 32, 0);            // --invert 1-6
+  MemorySetElementWait(159, 50, 41, 0, 0, true);   // --fw #41
+  MemorySetElementWait(160, 50,  6, 0, 0, true);   // --fw #6
 
-  MemorySetRoute  (     51, 1,  24, false, true);
-  MemorySetElement(    161, 51, 31, 0);
-  MemorySetElementWait(162, 51, 42, 0, 0, true);
-  MemorySetElementWait(163, 51, 31, 0, 0, true);
-  MemorySetRoute  (     52, 1,  23, false, true);
-  MemorySetElement(    164, 52, 31, 0);
-  MemorySetElementWait(165, 52, 42, 0, 0, true);
-  MemorySetElementWait(166, 52, 32, 0, 0, true);
-  MemorySetRoute  (     53, 1,  22, false, true);
-  MemorySetElement(    167, 53, 31, 0);
-  MemorySetElementWait(168, 53, 42, 0, 0, true);
-  MemorySetElementWait(169, 53, 33, 0, 0, true);
-  MemorySetRoute      ( 54, 1,  21, false, true);
-  MemorySetElement(    170, 54, 31, 0);
-  MemorySetElementWait(171, 54, 42, 0, 0, true);
-  MemorySetElementWait(172, 54, 34, 0, 0, true);
-  MemorySetRoute  (     55, 1,  20, false, true);
-  MemorySetElement(    173, 55, 31, 0);
-  MemorySetElementWait(174, 55, 42, 0, 0, true);
-  MemorySetElementWait(175, 55, 35, 0, 0, true);
-  MemorySetRoute  (     56, 1,  19, false, true);
-  MemorySetElement(    176, 56, 31, 0);
-  MemorySetElementWait(177, 56, 42, 0, 0, true);
-  MemorySetElementWait(178, 56, 36, 0, 0, true);
+                                                   // Einfahrten Gleis 7-12 über Hosenträger kreuzend aus Gleis 16
+  MemorySetRoute  (     51, 1,  24, false, true);  // Gleis 16 -> Gleis 12
+  MemorySetElement(    161, 51, 31, 0);            // --invert 7-12
+  MemorySetElementWait(162, 51, 42, 0, 0, true);   // --fw #42
+  MemorySetElementWait(163, 51, 31, 0, 0, true);   // --fw #31
+  MemorySetRoute  (     52, 1,  23, false, true);  // Gleis 16 -> Gleis 11
+  MemorySetElement(    164, 52, 31, 0);            // --invert 7-12
+  MemorySetElementWait(165, 52, 42, 0, 0, true);   // --fw #42
+  MemorySetElementWait(166, 52, 32, 0, 0, true);   // --fw #32
+  MemorySetRoute  (     53, 1,  22, false, true);  // Gleis 16 -> Gleis 10
+  MemorySetElement(    167, 53, 31, 0);            // --invert 7-12
+  MemorySetElementWait(168, 53, 42, 0, 0, true);   // --fw #42
+  MemorySetElementWait(169, 53, 33, 0, 0, true);   // --fw #33
+  MemorySetRoute      ( 54, 1,  21, false, true);  // Gleis 16 -> Gleis 9
+  MemorySetElement(    170, 54, 31, 0);            // --invert 7-12
+  MemorySetElementWait(171, 54, 42, 0, 0, true);   // --fw #42
+  MemorySetElementWait(172, 54, 34, 0, 0, true);   // --fw #34
+  MemorySetRoute  (     55, 1,  20, false, true);  // Gleis 16 -> Gleis 8
+  MemorySetElement(    173, 55, 31, 0);            // --invert 7-12
+  MemorySetElementWait(174, 55, 42, 0, 0, true);   // --fw #42
+  MemorySetElementWait(175, 55, 35, 0, 0, true);   // --fw #35
+  MemorySetRoute  (     56, 1,  19, false, true);  // Gleis 16 -> Gleis 7
+  MemorySetElement(    176, 56, 31, 0);            // --invert 7-12
+  MemorySetElementWait(177, 56, 42, 0, 0, true);   // --fw #42
+  MemorySetElementWait(178, 56, 36, 0, 0, true);   // --fw #36
 }
 
 void MemoryStapelInit10(void)
-{
-  MemorySetRoute  ( 57, 1,  3, false, true);
-  MemorySetElement(    179, 57, 32, 1);
-  MemorySetElementWait(180, 57, 43, 0, 0, true);
-  MemorySetElementWait(181, 57,  1, 0, 0, true);
-  MemorySetRoute  ( 58, 1,  4, false, true);
-  MemorySetElement(    182, 58, 32, 1);
-  MemorySetElementWait(183, 58, 43, 0, 0, true);
-  MemorySetElementWait(184, 58,  2, 0, 0, true);
-  MemorySetRoute  ( 59, 1,  5, false, true);
-  MemorySetElement(    185, 59, 32, 1);
-  MemorySetElementWait(186, 59, 43, 0, 0, true);
-  MemorySetElementWait(187, 59,  3, 0, 0, true);
-  MemorySetRoute  ( 60, 1,  6, false, true);
-  MemorySetElement(    188, 60, 32, 1);
-  MemorySetElementWait(189, 60, 43, 0, 0, true);
-  MemorySetElementWait(190, 60,  4, 0, 0, true);
-  MemorySetRoute  ( 61, 1,  7, false, true);
-  MemorySetElement(    191, 61, 32, 1);
-  MemorySetElementWait(192, 61, 43, 0, 0, true);
-  MemorySetElementWait(193, 61,  5, 0, 0, true);
-  MemorySetRoute  ( 62, 1,  8, false, true);
-  MemorySetElement(    194, 62, 32, 1);
-  MemorySetElementWait(195, 62, 43, 0, 0, true);
-  MemorySetElementWait(196, 62,  6, 0, 0, true);
+{                                                 // Einfahrten Gleis 1-6 über Hosenträger gerade aus Gleis 16
+  MemorySetRoute  ( 57, 1,  3, false, true);      // Gleis 16 -> Gleis 1
+  MemorySetElement(    179, 57, 32, 1);           // --non-invert 7-12
+  MemorySetElementWait(180, 57, 43, 0, 0, true);  // --fw #43
+  MemorySetElementWait(181, 57,  1, 0, 0, true);  // --fw #1
+  MemorySetRoute  ( 58, 1,  4, false, true);      // Gleis 16 -> Gleis 2
+  MemorySetElement(    182, 58, 32, 1);           // --non-invert 7-12
+  MemorySetElementWait(183, 58, 43, 0, 0, true);  // --fw #43
+  MemorySetElementWait(184, 58,  2, 0, 0, true);  // --fw #2
+  MemorySetRoute  ( 59, 1,  5, false, true);      // Gleis 16 -> Gleis 3
+  MemorySetElement(    185, 59, 32, 1);           // --non-invert 7-12
+  MemorySetElementWait(186, 59, 43, 0, 0, true);  // --fw #43
+  MemorySetElementWait(187, 59,  3, 0, 0, true);  // --fw #3
+  MemorySetRoute  ( 60, 1,  6, false, true);      // Gleis 16 -> Gleis 4
+  MemorySetElement(    188, 60, 32, 1);           // --non-invert 7-12
+  MemorySetElementWait(189, 60, 43, 0, 0, true);  // --fw #43
+  MemorySetElementWait(190, 60,  4, 0, 0, true);  // --fw #4
+  MemorySetRoute  ( 61, 1,  7, false, true);      // Gleis 16 -> Gleis 5
+  MemorySetElement(    191, 61, 32, 1);           // --non-invert 7-12
+  MemorySetElementWait(192, 61, 43, 0, 0, true);  // --fw #43
+  MemorySetElementWait(193, 61,  5, 0, 0, true);  // --fw #5
+  MemorySetRoute  ( 62, 1,  8, false, true);      // Gleis 16 -> Gleis 6
+  MemorySetElement(    194, 62, 32, 1);           // --non-invert 7-12
+  MemorySetElementWait(195, 62, 43, 0, 0, true);  // --fw #43
+  MemorySetElementWait(196, 62,  6, 0, 0, true);  // --fw #6
 
-  MemorySetRoute  ( 63, 24, 32, false, true);
-  MemorySetElement(    197, 63, 31, 1);
-  MemorySetElementWait(198, 63, 43, 0, 0, true);
-  MemorySetElementWait(199, 63, 31, 0, 0, true);
-  MemorySetRoute  ( 64, 23, 32, false, true);
-  MemorySetElement(    200, 64, 31, 1);
-  MemorySetElementWait(201, 64, 43, 0, 0, true);
-  MemorySetElementWait(202, 64, 32, 0, 0, true);
-  MemorySetRoute  ( 65, 22, 32, false, true);
-  MemorySetElement(    203, 65, 31, 1);
-  MemorySetElementWait(204, 65, 43, 0, 0, true);
-  MemorySetElementWait(205, 65, 33, 0, 0, true);
-  MemorySetRoute  ( 66, 21, 32, false, true);
-  MemorySetElement(    206, 66, 31, 1);
-  MemorySetElementWait(207, 66, 43, 0, 0, true);
-  MemorySetElementWait(208, 66, 34, 0, 0, true);
-  MemorySetRoute  ( 67, 20, 32, false, true);
-  MemorySetElement(    209, 67, 31, 1);
-  MemorySetElementWait(210, 67, 43, 0, 0, true);
-  MemorySetElementWait(211, 67, 35, 0, 0, true);
-  MemorySetRoute  ( 68, 19, 32, false, true);
-  MemorySetElement(    212, 68, 31, 1);
-  MemorySetElementWait(213, 68, 43, 0, 0, true);
-  MemorySetElementWait(214, 68, 36, 0, 0, true);
+                                                   // Ausfahrten Gleis 7-12 über Hosenträger gerade nach Gleis 17
+  MemorySetRoute  ( 63, 24, 32, false, true);      // Gleis 12 -> Gleis 17
+  MemorySetElement(    197, 63, 31, 1);            // --non-invert 1-6
+  MemorySetElementWait(198, 63, 43, 0, 0, true);   // --fw #43
+  MemorySetElementWait(199, 63, 31, 0, 0, true);   // --fw #31
+  MemorySetRoute  ( 64, 23, 32, false, true);      // Gleis 11 -> Gleis 17
+  MemorySetElement(    200, 64, 31, 1);            // --non-invert 1-6
+  MemorySetElementWait(201, 64, 43, 0, 0, true);   // --fw #43
+  MemorySetElementWait(202, 64, 32, 0, 0, true);   // --fw #32
+  MemorySetRoute  ( 65, 22, 32, false, true);      // Gleis 10 -> Gleis 17
+  MemorySetElement(    203, 65, 31, 1);            // --non-invert 1-6
+  MemorySetElementWait(204, 65, 43, 0, 0, true);   // --fw #43
+  MemorySetElementWait(205, 65, 33, 0, 0, true);   // --fw #33
+  MemorySetRoute  ( 66, 21, 32, false, true);      // Gleis 9 -> Gleis 17
+  MemorySetElement(    206, 66, 31, 1);            // --non-invert 1-6
+  MemorySetElementWait(207, 66, 43, 0, 0, true);   // --fw #43
+  MemorySetElementWait(208, 66, 34, 0, 0, true);   // --fw #34
+  MemorySetRoute  ( 67, 20, 32, false, true);      // Gleis 8 -> Gleis 17
+  MemorySetElement(    209, 67, 31, 1);            // --non-invert 1-6
+  MemorySetElementWait(210, 67, 43, 0, 0, true);   // --fw #43
+  MemorySetElementWait(211, 67, 35, 0, 0, true);   // --fw #35
+  MemorySetRoute  ( 68, 19, 32, false, true);      // Gleis 7 -> Gleis 17
+  MemorySetElement(    212, 68, 31, 1);            // --non-invert 1-6
+  MemorySetElementWait(213, 68, 43, 0, 0, true);   // --fw #43
+  MemorySetElementWait(214, 68, 36, 0, 0, true);   // --fw #36
 }
 
 void MemoryStapelInit11(void)
-{
-  MemorySetElement(215, 13, 32, 1);
-  MemorySetElement(216, 14, 32, 1);
-  MemorySetElement(217, 15, 32, 1);
-  MemorySetElement(218, 16, 32, 1);
-  MemorySetElement(219, 17, 32, 1);
-  MemorySetElement(220, 18, 32, 1);
+{                                    // Polarisation normal stellen, angehängt an die jeweilige Route
+  MemorySetElement(215, 13, 32, 1);  // Gleis 1 -> Gleis 26 
+  MemorySetElement(216, 14, 32, 1);  // Gleis 2 -> Gleis 26
+  MemorySetElement(217, 15, 32, 1);  // Gleis 3 -> Gleis 26
+  MemorySetElement(218, 16, 32, 1);  // Gleis 4 -> Gleis 26
+  MemorySetElement(219, 17, 32, 1);  // Gleis 5 -> Gleis 26
+  MemorySetElement(220, 18, 32, 1);  // Gleis 6 -> Gleis 26
 
-  MemorySetElement(221, 19, 31, 1);
-  MemorySetElement(222, 20, 31, 1);
-  MemorySetElement(223, 21, 31, 1);
-  MemorySetElement(224, 22, 31, 1);
-  MemorySetElement(225, 23, 31, 1);
-  MemorySetElement(226, 24, 31, 1);
+  MemorySetElement(221, 19, 31, 1);  // Gleis 27 -> Gleis 7
+  MemorySetElement(222, 20, 31, 1);  // Gleis 27 -> Gleis 8
+  MemorySetElement(223, 21, 31, 1);  // Gleis 27 -> Gleis 9
+  MemorySetElement(224, 22, 31, 1);  // Gleis 27 -> Gleis 10
+  MemorySetElement(225, 23, 31, 1);  // Gleis 27 -> Gleis 11
+  MemorySetElement(226, 24, 31, 1);  // Gleis 27 -> Gleis 12
 }
 #endif
 
